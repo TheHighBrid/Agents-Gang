@@ -1,0 +1,1333 @@
+Agents Gang / Mo OS / Melato OS: a squad of specialized agents that audit, write, research, monitor, draft, organize, and ask for approval before touching anything important.
+I’ll give you the full build path from simple MVP → serious automated system.
+0. The core idea
+My swarm should have one boss agent and multiple specialist agents.
+Me
+ ↓
+Orchestrator Agent
+ ↓
+Specialist Agents
+ ├── Melato Product Page Agent
+ ├── Creative Director Agent
+ ├── Shopify Ops Agent
+ ├── Visual QA Agent
+ ├── Concierge / Customer Support Agent
+ ├── Trend Radar Agent
+ ├── Finance + Margin Agent
+ ├── Job/Career Agent
+ └── Email + Calendar Agent
+The Orchestrator Agent decides:
+What I asked for
+Which specialist should handle it
+What data/tools are needed
+Whether it can act automatically
+Whether it needs my approval
+Claude’s API supports tool use, meaning Claude can decide when to call functions I define, while my application executes those functions. That is the exact pattern I need for agents that can read Shopify, Gmail, files, spreadsheets, analytics, or calendars. �
+Claude Platform
+1. The safest automation rule
+My swarm needs 4 permission levels.
+Level
+Name
+What it can do
+Level 1
+Read-only
+Scan, analyze, summarize
+Level 2
+Draft
+Write copy, emails, product descriptions, plans
+Level 3
+Suggest action
+Prepare Shopify/Gmail/calendar updates but wait for approval
+Level 4
+Execute
+Publish, send, update, delete, archive
+For Melato, once all os properly set up and tests are positives We will start with:
+Default mode: Level 1 + Level 2 only.
+we will allow specific actions like:
+Agent may update product copy only after my approval.
+Agent may label emails automatically.
+Agent may create drafts, but never send them. (for now, later it will)
+Agent may generate daily reports without approval.
+This matters because agentic systems can be powerful, but I want myself as creative director, not “AI intern loose in the warehouse with scissors.” 🧵
+2. My first swarm lineup
+Do not build 20 agents first. Build 8 clean agents.
+Agent 1: Melato Product Page Agent
+Purpose:
+Audit every product page
+Detect weak copy
+Find missing specs
+Rewrite descriptions
+Improve SEO
+Create Shopify-ready metafield suggestions
+Inputs:
+Shopify product title
+Description
+Price
+Images
+Variants
+Tags
+Product type
+Existing metafields
+Outputs:
+Score: 72/100
+Main issue: Copy lacks proof for the price point.
+Missing: fabric composition, model height, fit notes, care instructions.
+New product copy: ...
+SEO title: ...
+SEO meta description: ...
+Hard-spec block: ...
+Automation level:
+Read + draft only at first.
+Agent 2: Melato Creative Director Agent
+Purpose:
+Product names
+Drop concepts
+Embroidery ideas
+Campaign taglines
+Collection stories
+Email/SMS copy
+Artistic direction
+It should know your language:
+Melato is design-led apparel, not generic streetwear.
+Tone: poetic, sharp, premium, clever, a little dangerous.
+Avoid cheap hype language.
+Use names like OVUM, Conquista, Reliance, Aurelia, Hargneux, Agape, Divididos.
+Automation level:
+Draft only.
+Agent 3: Shopify Ops Agent
+Purpose:
+Find missing alt text
+Detect broken links
+Check missing product images
+Check missing policy pages
+Check collection issues
+Check duplicate products
+Check unavailable variants
+Check SEO gaps
+Automation level:
+Daily report automatically.
+No store edits yet.
+Agent 4: Visual QA Agent
+Purpose:
+Check if product images match the Melato standard
+Detect inconsistent crop, scale, length, background, shadow, spacing
+Flag missing angles: front, back, 45°, macro
+Output:
+Product: Aurelia Deadwing Velour Track Jacket
+Image issue: Jacket appears 9% smaller than reference.
+Fix: Resize garment to match approved Melato jacket template. Maintain design unchanged.
+Automation level:
+Report only.
+Agent 5: Concierge Agent
+Purpose:
+Customer support
+Sizing help0
+Garment care
+Shipping expectations
+Returns guidance
+VIP preview support
+It can draft responses like:
+For the OVUM Satin Track Pant, choose your true size for a relaxed athletic fit. If you are between sizes, size up for a cleaner drape.
+Automation level:
+Draft replies only.
+Agent 6: Trend Radar Agent
+Purpose:
+Fashion/luxury/street culture trends
+Shopify/ecommerce ideas
+AI design tools
+Designer brand moves
+Ottawa/Montreal events
+Morocco/MENA fashion references
+FC Barcelona culture/fashion moments
+Automation level:
+Daily/weekly report.
+Agent 7: Finance + Margin Agent
+Purpose:
+Product margin calculator
+Cost of goods
+Shipping cost
+Shopify fees
+Packaging
+Discount risk
+Break-even analysis
+Monthly business overview
+Output:
+Selling price: $149.99
+Estimated landed cost: $48
+Gross margin before fees: 68%
+Realistic margin after packaging/payment/discount: 54–58%
+Automation level:
+Report + calculations.
+No financial transactions.
+Agent 8: Career / Life Admin Agent
+Purpose:
+CRA hiring process tracker
+Job application tracker
+Interview prep
+Email follow-ups
+Calendar planning
+Banking/finance job alerts
+Resume tailoring
+Automation level:
+Draft + reminders.
+No email sending without approval.
+3. The exact architecture
+I want this structure:
+melato-agent-swarm/
+├── app/
+│   ├── api/
+│   │   ├── chat/route.ts
+│   │   ├── run-agent/route.ts
+│   │   ├── webhooks/
+│   │   │   ├── shopify/route.ts
+│   │   │   └── gmail/route.ts
+│   ├── dashboard/
+│   └── approvals/
+├── agents/
+│   ├── orchestrator.ts
+│   ├── productPageAgent.ts
+│   ├── creativeDirectorAgent.ts
+│   ├── shopifyOpsAgent.ts
+│   ├── visualQAAgent.ts
+│   ├── conciergeAgent.ts
+│   ├── trendRadarAgent.ts
+│   ├── financeAgent.ts
+│   └── careerAgent.ts
+├── tools/
+│   ├── shopify.ts
+│   ├── gmail.ts
+│   ├── calendar.ts
+│   ├── webSearch.ts
+│   ├── imageAudit.ts
+│   ├── database.ts
+│   └── approvals.ts
+├── memory/
+│   ├── brandBible.md
+│   ├── productStandards.md
+│   ├── namingRules.md
+│   ├── customerPolicies.md
+│   └── visualStandards.md
+├── jobs/
+│   ├── dailyMelatoAudit.ts
+│   ├── weeklyTrendRadar.ts
+│   ├── inboxTriage.ts
+│   └── productPageScan.ts
+├── db/
+│   ├── schema.sql
+│   └── seed.ts
+├── package.json
+├── .env
+└── README.md
+That’s the skeleton.
+4. My tech stack
+I’d build it with this:
+Layer
+Tool
+AI model
+Claude Opus 4.8 for complex agents
+Cheap model
+Claude Sonnet/Haiku for simple repetitive tasks
+App
+Next.js
+Backend
+Node.js / TypeScript
+Database
+Supabase Postgres
+Queue/scheduler
+Inngest, Trigger.dev, or cron
+Automations
+n8n or Make at first
+Shopify
+Shopify Admin API
+Email
+Gmail API
+Calendar
+Google Calendar API
+File memory
+Markdown + database
+Deployment
+Vercel or Railway
+Claude Opus 4.8 is the right choice for the “heavy brain” tasks like strategy, coding, complex audits, long product analysis, and multi-step agent work. Anthropic’s model docs currently position Opus 4.8 as the most capable Opus-tier model for complex tasks, and Anthropic’s announcement emphasized coding, agentic work, reasoning, and knowledge work improvements. �
+Claude Platform +1
+5. Phase-by-phase build plan
+Phase 1: Build the brain, no automation yet
+Goal:
+I type a request.
+The Orchestrator picks the right agent.
+The agent replies with a structured result.
+No external actions yet.
+Example:
+User: Audit OVUM Satin Track Pant page.
+Orchestrator: Route to Product Page Agent.
+Product Page Agent: Return grade, issues, fixes, rewritten copy.
+Step 1. Create project
+npx create-next-app@latest melato-agent-swarm
+cd melato-agent-swarm
+npm install @anthropic-ai/sdk zod dotenv
+Step 2. Create .env
+ANTHROPIC_API_KEY=your_key_here
+SHOPIFY_STORE_DOMAIN=melato.myshopify.com
+SHOPIFY_ADMIN_ACCESS_TOKEN=your_shopify_admin_token
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_key
+Do not commit this file to GitHub.
+6. Create your brand memory
+Create:
+memory/brandBible.md
+Paste this:
+# Melato Brand Bible
+
+Melato is a design-led apparel brand based in Ottawa, Canada.
+
+Positioning:
+Premium, artistic, intentional, modern, sharp, poetic.
+
+Do not call Melato generic streetwear.
+Use "design-led apparel" when describing the brand.
+
+Tone:
+- Clever
+- Premium
+- Poetic
+- Direct
+- Slightly dangerous
+- Culturally layered
+- Not corny
+- Not fake luxury
+- Not hypebeast spam
+
+Visual identity:
+- Ghost mannequin product images
+- Clean grey or off-white background
+- Realistic shadows
+- Product-page consistency
+- Front, back, 45-degree, macro detail
+- No random styling changes unless requested
+
+Naming style:
+Melato product names should feel artistic, memorable, and elevated.
+Examples:
+- OVUM Satin Track Pant
+- Divididos Velour Track Jacket
+- Conquista Velour Track Pant
+- Reliance Bamboo Velour Track Jacket
+- Aurelia Deadwing Velour Track
+- Hargneux Velour Track
+- Agape Velour Track
+- Clockout Velour Track
+- Crush Theory Velour Track
+
+Avoid:
+- Generic names
+- Cheap trend words
+- Overused luxury clichés
+- Empty premium language
+Create:
+memory/productStandards.md
+Paste:
+# Melato Product Page Standard
+
+Every product page should include:
+
+1. Product story
+2. Material composition
+3. Fabric weight
+4. Fit notes
+5. Waistband/collar/cuff details
+6. Pocket details
+7. Inseam or garment measurement
+8. Model height and size worn
+9. Care instructions
+10. Made/fulfilled from
+11. Price justification
+12. Complete-the-set recommendation
+13. SEO title
+14. SEO description
+
+Hard-spec block example:
+
+Fabric: 92% polyester / 8% spandex satin blend
+Weight: Midweight
+Fit: Relaxed athletic, straight-to-easy leg
+Waist: Elastic waistband with internal drawcord
+Pockets: Two side pockets
+Inseam: 78 cm on size M
+Model: 6'0 wearing size M
+Care: Cold wash inside out, hang dry, do not tumble dry
+Fulfillment: Ships from Canada
+Create:
+memory/visualStandards.md
+Paste:
+# Melato Visual Product Standard
+
+Approved product image standard:
+- Centered garment
+- Same scale across all products
+- Same crop
+- Same garment length
+- Same sleeve spread
+- Same background
+- Same shadow softness
+- No design/color changes
+- Front, back, 45-degree angle, macro close-up
+
+When correcting an image:
+- Preserve original garment color
+- Preserve design details
+- Preserve embroidery
+- Preserve proportions
+- Only adjust placement, sizing, crop, background, lighting, and sharpness
+This memory is the “taste spine” of the swarm.
+7. Build the Orchestrator Agent
+Create:
+agents/orchestrator.ts
+export const orchestratorPrompt = `
+You are the Orchestrator for Melato OS, a private agent swarm for Mohamed Alem, founder of Melato.
+
+Your job:
+1. Understand the user's request.
+2. Choose the best specialist agent.
+3. Decide what tools are needed.
+4. Decide the automation risk level.
+5. Return a structured routing plan.
+
+Available agents:
+- product_page_agent
+- creative_director_agent
+- shopify_ops_agent
+- visual_qa_agent
+- concierge_agent
+- trend_radar_agent
+- finance_agent
+- career_agent
+- general_life_admin_agent
+
+Risk levels:
+1 = read/analyze only
+2 = draft only
+3 = prepare action requiring approval
+4 = execute action
+
+Rules:
+- Default to risk level 1 or 2.
+- Never publish Shopify changes without approval.
+- Never send emails without approval.
+- Never delete data without approval.
+- Never change prices without approval.
+- Never invent product specs. If specs are missing, mark them as missing.
+- Melato tone must stay premium, artistic, clever, and direct.
+
+Return JSON only:
+{
+  "agent": "...",
+  "risk_level": 1,
+  "reason": "...",
+  "needed_tools": [],
+  "user_intent": "...",
+  "approval_required": true
+}
+`;
+8. Build the Product Page Agent
+Create:
+agents/productPageAgent.ts
+export const productPageAgentPrompt = `
+You are the Melato Product Page Agent.
+
+Your role:
+Audit and improve Melato product pages so they feel premium, trustworthy, specific, and conversion-focused.
+
+You must check:
+- Product title quality
+- Description specificity
+- Price justification
+- Fabric/material details
+- Fit notes
+- Sizing guidance
+- Model sizing
+- Care instructions
+- SEO title
+- SEO description
+- Complete-the-set opportunities
+- Repeated generic copy
+- Missing trust details
+
+Scoring:
+Give a score out of 100.
+
+Melato tone:
+Premium, artistic, intelligent, poetic when appropriate, but never vague.
+Avoid generic phrases like:
+- Premium construction selected for feel
+- Everyday wearability
+- Elevated essential
+unless supported by concrete details.
+
+Never invent fabric composition, measurements, or manufacturing details.
+If missing, say "Missing, needs confirmation."
+
+Return format:
+# Product Page Audit: [Product Name]
+
+## Score
+[number]/100
+
+## Main Diagnosis
+[short direct diagnosis]
+
+## What Is Working
+[...]
+
+## What Is Hurting Conversion
+[...]
+
+## Missing Hard Specs
+[...]
+
+## Recommended Hard-Spec Block
+Use "Missing, needs confirmation" where needed.
+
+## Rewritten Product Description
+[...]
+
+## SEO Title
+[...]
+
+## SEO Meta Description
+[...]
+
+## Shopify Implementation Notes
+[metafields, sections, blocks]
+`;
+9. Build the Creative Director Agent
+Create:
+agents/creativeDirectorAgent.ts
+export const creativeDirectorAgentPrompt = `
+You are the Melato Creative Director Agent.
+
+Your role:
+Help create names, concepts, collection stories, embroidery ideas, campaign copy, product narratives, and visual direction.
+
+Melato is:
+- Design-led apparel
+- Premium
+- Artistic
+- Culturally layered
+- Witty
+- Poetic
+- Modern
+- Clean but emotional
+
+Naming rules:
+- Names should feel memorable and ownable.
+- Prefer words with story, tension, irony, beauty, or cultural texture.
+- Avoid generic names like Essential, Classic, Urban, Luxe, Premium Fit.
+- Names can use French, Arabic, Latin, Spanish, poetic English, or invented phrasing if tasteful.
+- Names must still be wearable as product names.
+
+Return:
+- Best recommendation first
+- Then alternatives
+- Explain why each works
+- Flag weak names honestly
+`;
+10. Build the Shopify Ops Agent
+Create:
+agents/shopifyOpsAgent.ts
+export const shopifyOpsAgentPrompt = `
+You are the Melato Shopify Operations Agent.
+
+Your role:
+Audit the Shopify store for operational, SEO, merchandising, and trust issues.
+
+Check:
+- Products missing descriptions
+- Products missing images
+- Missing alt text
+- Missing SEO title/description
+- Missing size guide
+- Missing care instructions
+- Broken links
+- Inconsistent prices
+- Missing collection assignment
+- Empty collections
+- Products without tags
+- Variant problems
+- Out-of-stock products
+- Policy page gaps
+- Product pages that do not justify their price
+
+Rules:
+- Report issues clearly.
+- Prioritize by business impact.
+- Never change Shopify data unless approval is explicitly given.
+- When suggesting fixes, give Shopify-ready instructions.
+
+Return:
+# Shopify Ops Report
+
+## Critical Issues
+[...]
+
+## High-Impact Fixes
+[...]
+
+## Quick Wins
+[...]
+
+## Suggested Shopify Actions
+[...]
+
+## Approval Needed For
+[...]
+`;
+11. Build the Concierge Agent
+Create:
+agents/conciergeAgent.ts
+export const conciergeAgentPrompt = `
+You are the Melato Concierge Agent.
+
+Your role:
+Draft customer support replies for sizing, shipping, returns, product care, order questions, and private preview access.
+
+Tone:
+- Warm
+- Premium
+- Helpful
+- Calm
+- Human
+- Not robotic
+- Not over-apologetic
+- Not cheap-sounding
+
+Rules:
+- Never promise an exact delivery date unless data confirms it.
+- Never approve a refund unless policy and owner approval confirm it.
+- Never invent inventory availability.
+- If unsure, draft a reply that asks for the needed detail gracefully.
+- Keep replies concise.
+
+Return:
+## Customer Reply Draft
+[...]
+
+## Internal Note
+[...]
+
+## Risk / Approval Needed
+[...]
+`;
+12. Build the Finance Agent
+Create:
+agents/financeAgent.ts
+export const financeAgentPrompt = `
+You are the Melato Finance and Margin Agent.
+
+Your role:
+Help calculate product margins, costs, pricing, break-even points, discounts, cashflow, and business decisions.
+
+Inputs may include:
+- Selling price
+- Product cost
+- Shipping cost
+- Packaging cost
+- Shopify fees
+- Ad spend
+- Return rate
+- Discount rate
+
+Rules:
+- Show calculations clearly.
+- Separate assumptions from confirmed numbers.
+- Never pretend estimates are exact.
+- Give practical recommendations.
+- Flag when price does not protect margin.
+
+Return:
+# Margin Analysis
+
+## Confirmed Inputs
+[...]
+
+## Assumptions
+[...]
+
+## Calculations
+[...]
+
+## Margin Result
+[...]
+
+## Recommendation
+[...]
+`;
+13. Create the API route
+Create:
+app/api/chat/route.ts
+Example skeleton:
+import Anthropic from "@anthropic-ai/sdk";
+import { orchestratorPrompt } from "../../../agents/orchestrator";
+import { productPageAgentPrompt } from "../../../agents/productPageAgent";
+import { creativeDirectorAgentPrompt } from "../../../agents/creativeDirectorAgent";
+import { shopifyOpsAgentPrompt } from "../../../agents/shopifyOpsAgent";
+import { conciergeAgentPrompt } from "../../../agents/conciergeAgent";
+import { financeAgentPrompt } from "../../../agents/financeAgent";
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+});
+
+const agentPrompts: Record<string, string> = {
+  product_page_agent: productPageAgentPrompt,
+  creative_director_agent: creativeDirectorAgentPrompt,
+  shopify_ops_agent: shopifyOpsAgentPrompt,
+  concierge_agent: conciergeAgentPrompt,
+  finance_agent: financeAgentPrompt,
+};
+
+export async function POST(req: Request) {
+  const { message } = await req.json();
+
+  // 1. Ask orchestrator where to route
+  const routeResponse = await anthropic.messages.create({
+    model: "claude-opus-4-8",
+    max_tokens: 1000,
+    system: orchestratorPrompt,
+    messages: [
+      {
+        role: "user",
+        content: message,
+      },
+    ],
+  });
+
+  const routeText =
+    routeResponse.content[0].type === "text"
+      ? routeResponse.content[0].text
+      : "{}";
+
+  const route = JSON.parse(routeText);
+  const selectedPrompt = agentPrompts[route.agent];
+
+  if (!selectedPrompt) {
+    return Response.json({
+      error: "No valid agent selected",
+      route,
+    });
+  }
+
+  // 2. Run specialist agent
+  const agentResponse = await anthropic.messages.create({
+    model: "claude-opus-4-8",
+    max_tokens: 4000,
+    system: selectedPrompt,
+    messages: [
+      {
+        role: "user",
+        content: message,
+      },
+    ],
+  });
+
+  const output =
+    agentResponse.content[0].type === "text"
+      ? agentResponse.content[0].text
+      : "";
+
+  return Response.json({
+    route,
+    output,
+  });
+}
+This is my first working swarm.
+At this stage, it does not touch Shopify yet. It just routes and thinks.
+14. Add tools next
+Anthropic’s tool-use docs explain the core loop: Claude chooses a tool call, my app executes it, then returns the result back to Claude. That means I define functions like getShopifyProducts, auditProductPage, createDraftEmail, or calculateMargin, and Claude decides when to use them. �
+Claude Platform
+Tool examples I need
+tools/shopify.ts
+- getProducts()
+- getProductByHandle()
+- updateProductDraft()
+- getCollections()
+- getProductImages()
+- getMetafields()
+
+tools/gmail.ts
+- searchEmails()
+- createDraft()
+- labelEmail()
+- summarizeThread()
+
+tools/calendar.ts
+- getTodayEvents()
+- createFocusBlock()
+- findFreeTime()
+
+tools/database.ts
+- saveAgentRun()
+- saveApprovalRequest()
+- getBrandMemory()
+- getProductAuditHistory()
+15. Shopify tool example
+Create:
+tools/shopify.ts
+const SHOPIFY_STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!;
+const SHOPIFY_ADMIN_ACCESS_TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN!;
+
+export async function shopifyGraphQL(query: string, variables = {}) {
+  const response = await fetch(
+    `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2026-04/graphql.json`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": SHOPIFY_ADMIN_ACCESS_TOKEN,
+      },
+      body: JSON.stringify({ query, variables }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Shopify API error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function getShopifyProducts(first = 20) {
+  const query = `
+    query GetProducts($first: Int!) {
+      products(first: $first) {
+        edges {
+          node {
+            id
+            title
+            handle
+            descriptionHtml
+            productType
+            vendor
+            tags
+            status
+            totalInventory
+            onlineStoreUrl
+            variants(first: 20) {
+              edges {
+                node {
+                  id
+                  title
+                  price
+                  compareAtPrice
+                  inventoryQuantity
+                }
+              }
+            }
+            seo {
+              title
+              description
+            }
+            images(first: 10) {
+              edges {
+                node {
+                  id
+                  url
+                  altText
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  return shopifyGraphQL(query, { first });
+}
+Double-check Shopify’s current Admin API version before using this in production. The structure is right, but API versions move over time.
+16. Product audit workflow
+Create:
+jobs/productPageScan.ts
+Pseudo-flow:
+import { getShopifyProducts } from "../tools/shopify";
+
+export async function runProductPageScan() {
+  const products = await getShopifyProducts(50);
+
+  for (const product of products.data.products.edges) {
+    const node = product.node;
+
+    // Send product data to Product Page Agent
+    // Save audit result to database
+    // If score below 75, create approval task
+  }
+}
+The daily result should look like:
+Melato Product Page Scan
+
+Scanned: 53 products
+
+Critical:
+- OVUM Satin Track Pant: 61/100
+- Vision Moto Flare Pants: 66/100
+- Atlas Dopp Kit: 69/100
+
+Top issue:
+Most pages lack hard specifications.
+
+Recommended today:
+Fix OVUM first because its price point needs stronger proof.
+17. Build approval system
+Create a database table:
+create table approval_requests (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamp default now(),
+  agent_name text not null,
+  action_type text not null,
+  risk_level int not null,
+  title text not null,
+  current_value text,
+  proposed_value text,
+  status text default 'pending',
+  approved_at timestamp,
+  rejected_at timestamp
+);
+Example approval:
+Approval Request
+
+Agent: Product Page Agent
+Action: Update Shopify product description
+Product: OVUM Satin Track Pant
+Risk Level: 3
+
+Current:
+"Premium track fabric selected for softness..."
+
+Proposed:
+"The OVUM Satin Track Pant is cut from a smooth satin-blend track fabric..."
+
+Buttons:
+Approve / Reject / Edit
+Nothing goes live until you approve.
+This is the difference between a useful agent and chaos in a hoodie.
+18. Build my daily automation schedule
+Use cron, Trigger.dev, Inngest, n8n, or Make.
+Daily jobs
+8:00 AM — Personal Briefing Agent
+9:00 AM — Shopify Ops Scan
+11:00 AM — Product Page Agent scan
+3:00 PM — Trend Radar
+6:00 PM — Finance/Margin pulse
+9:00 PM — Creative Director idea dump
+Weekly jobs
+Monday — Melato store audit
+Wednesday — Competitor scan
+Friday — Drop readiness report
+Saturday — Creative trend article
+Sunday — Life/admin reset
+19. The first MVP I should build
+Do not start with everything.
+Build this exact MVP:c
+MVP v1: Melato Product Intelligence Agent
+Features:
+Manually paste a product page
+Agent audits it
+Agent gives score
+Agent rewrites copy
+Agent creates hard-spec block
+Agent creates SEO title/meta
+Agent saves the audit
+This can be built in one clean app before connecting Shopify.
+MVP input
+Product name:
+OVUM Satin Track Pant
+
+Price:
+$149.99
+
+Current description:
+Premium track fabric selected for softness, clean movement, and everyday wearability.
+
+Known details:
+Black satin track pant. Relaxed athletic fit. Elastic waistband. Side pockets.
+MVP output
+Score: 58/100
+
+Problem:
+The copy sounds premium but does not prove the price.
+
+Missing:
+- Fabric composition
+- Weight
+- Inseam
+- Model size
+- Care instructions
+- Fulfillment location
+
+Rewritten description:
+...
+
+Hard-spec block:
+...
+
+SEO:
+...
+Once this works, connect Shopify.
+20. Then build MVP v2: Shopify-connected
+MVP v2 features:
+Pull all Shopify products
+Audit each product
+Rank pages by urgency
+Generate fixes
+Create approval requests
+I approve
+Agent updates product description
+Do not let it publish automatically at first.
+21. Then build MVP v3: full Melato OS dashboard
+Dashboard tabs:
+Dashboard
+├── Today
+├── Product Audits
+├── Shopify Issues
+├── Creative Lab
+├── Customer Replies
+├── Trend Radar
+├── Finance
+├── Career
+└── Approvals
+Dashboard homepage should show:
+Today’s Melato OS
+
+Store Health: 74/100
+Product Copy Health: 61/100
+Visual Consistency: 68/100
+SEO Health: 57/100
+
+Needs approval:
+- Update OVUM Satin Track Pant description
+- Add care block to Vision Moto Jacket
+- Draft customer reply about sizing
+
+Today’s creative spark:
+“Evening trackwear is my best lane for OVUM. Position it like satin armor, not sportswear.”
+That’s clean. That’s useful.
+22. The agent prompts need shared memory
+Every specialist should load:
+brandBible.md
+productStandards.md
+visualStandards.md
+customerPolicies.md
+In code:
+import fs from "fs";
+
+export function loadMemory() {
+  const brandBible = fs.readFileSync("memory/brandBible.md", "utf8");
+  const productStandards = fs.readFileSync("memory/productStandards.md", "utf8");
+  const visualStandards = fs.readFileSync("memory/visualStandards.md", "utf8");
+
+  return `
+${brandBible}
+
+${productStandards}
+
+${visualStandards}
+`;
+}
+Then:
+const systemPrompt = `
+${loadMemory()}
+
+${productPageAgentPrompt}
+`;
+Now my agents don’t forget the Melato taste.
+23. Use MCP later, not first
+MCP is useful once the system gets bigger. The Model Context Protocol is an open standard for connecting AI apps to external systems like data sources, tools, and workflows. It basically creates a standardized way for agents to access outside context and actions. �
+Model Context Protocol +1
+But for my first version, don’t overcomplicate it.
+Start with direct tools:
+Shopify API
+Gmail API
+Google Calendar API
+Supabase
+Web search
+Later, MCP can help me standardize tools.
+24. The “swarm” behavior
+Swarm does not mean all agents talk at once all the time.
+Use this pattern:
+1. Orchestrator receives task.
+2. Orchestrator chooses 1 primary agent.
+3. Primary agent can request help from 1–3 secondary agents.
+4. Orchestrator merges results.
+5. Final answer is sent to you.
+6. Any risky action becomes an approval request.
+Example:
+Task:
+Prepare OVUM drop launch.
+
+Primary:
+Drop Launch Agent
+
+Secondary:
+- Product Page Agent
+- Creative Director Agent
+- Shopify Ops Agent
+- Email Agent
+- Visual QA Agent
+
+Final:
+Launch readiness report + approval tasks.
+25. my exact first 7-day build plan
+Day 1: Set up project
+Build:
+Next.js app
+Anthropic API connected
+Basic chat UI
+Orchestrator agent
+Product Page Agent
+Creative Director Agent
+Test prompts:
+Audit this product page.
+Name this jacket.
+Rewrite this product description.
+Day 2: Add brand memory
+Build:
+brandBible.md
+productStandards.md
+visualStandards.md
+namingRules.md
+Test:
+Name this jacket in Melato style.
+Audit this product page using Melato standards.
+Day 3: Add Shopify read-only connection
+Build:
+getProducts()
+getProductByHandle()
+getCollections()
+getProductImages()
+Test:
+Scan my first 10 products and tell me which pages need work.
+Day 4: Add product audit database
+Build tables:
+agent_runs
+product_audits
+approval_requests
+products_cache
+Save every audit.
+Day 5: Add approvals
+Build:
+Approvals page
+Approve button
+Reject button
+Edit proposal button
+No Shopify writing yet.
+Day 6: Add Shopify draft updates
+Build:
+prepareProductDescriptionUpdate()
+updateProductDescriptionAfterApproval()
+Only approved changes go live.
+Day 7: Add daily report
+Build scheduled job:
+Daily Melato Store Health Report
+It should send/report:
+Product copy issues
+Missing specs
+SEO gaps
+Image issues
+Urgent fixes
+Recommended task of the day
+26. Database schema
+Use Supabase.
+create table agent_runs (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamp default now(),
+  agent_name text not null,
+  input jsonb,
+  output jsonb,
+  risk_level int,
+  status text default 'completed'
+);
+
+create table product_audits (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamp default now(),
+  shopify_product_id text,
+  product_title text,
+  handle text,
+  score int,
+  diagnosis text,
+  missing_specs jsonb,
+  rewritten_description text,
+  seo_title text,
+  seo_description text,
+  status text default 'draft'
+);
+
+create table approval_requests (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamp default now(),
+  agent_name text not null,
+  action_type text not null,
+  risk_level int not null,
+  title text not null,
+  target_type text,
+  target_id text,
+  current_value text,
+  proposed_value text,
+  status text default 'pending'
+);
+
+create table brand_memory (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamp default now(),
+  category text not null,
+  title text not null,
+  content text not null
+);
+27. Tool permissions table
+Hard-code this first.
+export const permissions = {
+  product_page_agent: {
+    canReadShopify: true,
+    canDraftShopifyUpdates: true,
+    canPublishShopifyUpdates: false,
+    canSendEmail: false,
+    canDelete: false,
+  },
+  creative_director_agent: {
+    canReadShopify: true,
+    canDraftShopifyUpdates: true,
+    canPublishShopifyUpdates: false,
+    canSendEmail: false,
+    canDelete: false,
+  },
+  shopify_ops_agent: {
+    canReadShopify: true,
+    canDraftShopifyUpdates: true,
+    canPublishShopifyUpdates: false,
+    canSendEmail: false,
+    canDelete: false,
+  },
+  concierge_agent: {
+    canReadShopify: true,
+    canDraftEmail: true,
+    canSendEmail: false,
+    canRefund: false,
+    canDelete: false,
+  },
+  finance_agent: {
+    canReadFinanceData: true,
+    canMoveMoney: false,
+    canDelete: false,
+  },
+};
+Never trust prompts alone for permissions. Put permissions in code.
+28. Daily report format
+my morning report should look like this:
+# Melato OS Morning Brief
+
+## Store Health
+Score: 74/100
+
+## Biggest Issue Today
+Product pages still lack enough hard specs to justify premium pricing.
+
+## Products Needing Attention
+1. OVUM Satin Track Pant — 61/100
+2. Vision Moto Flare Pants — 66/100
+3. Atlas Dopp Kit — 69/100
+
+## Recommended Move
+Fix OVUM Satin Track Pant first because it has the highest price/resistance gap.
+
+## Draft Ready For Approval
+- New OVUM product description
+- New SEO meta description
+- New hard-spec block
+
+## Creative Spark
+Position OVUM as “evening trackwear,” not gym trackwear.
+Very usable. No fluff.
+29. The automations you I create first
+Automation 1: Daily product page scan
+Every morning:
+Scan 10 products.
+Score pages.
+Create fix suggestions.
+Send report.
+Automation 2: Weekly Shopify cleanup
+Every Monday:
+Check broken links, missing SEO, missing images, low inventory, empty collections.
+Automation 3: Daily creative radar
+Every afternoon:
+Summarize trends in fashion, ecommerce, AI design tools, luxury street culture.
+Extract 3 ideas Melato can use.
+Automation 4: Inbox triage
+Every morning:
+Find job emails, Melato customer emails, important finance/admin emails.
+Draft replies where needed.
+Automation 5: Friday drop readiness
+Every Friday:
+Check if any product/drop is launch-ready.
+List missing assets, product copy, images, emails, pages, SEO, inventory.
+30. Example commands you’ll be able to say
+Once built, you can talk to your swarm like:
+Audit all Melato product pages and rank what to fix first.
+Rewrite the OVUM Satin Track Pant page with a stronger premium reason to buy.
+Check my Shopify store for missing SEO and image alt text.
+Prepare a private preview campaign for the next Melato drop.
+Give me 20 product names for this jacket in Melato language.
+Check today’s emails and tell me what needs my attention.
+Create a margin analysis for this jacket if landed cost is $52 and price is $149.99.
+Build my launch checklist for Aurelia Deadwing Velour Track.
+31. My strongest recommendation
+Build the swarm in this order:
+First
+Orchestrator
+Product Page Agent
+Creative Director Agent
+Second
+Shopify read-only tools
+Database
+Audit history
+Third
+Approval system
+Shopify draft updates
+Daily reports
+Fourth
+Concierge Agent
+Email Agent
+Trend Radar Agent
+Finance Agent
+Fifth
+Visual QA Agent
+Image standards
+Automated product image checklist
+The first agent I should actually ship is:
+Melato Product Intelligence Agent
+Because it attacks the biggest business problem directly:
+Product pages that look premium but don’t explain enough to make the customer comfortable paying premium prices.
+That one can make Melato sharper immediately.
+32. The cleanest MVP prompt to start with
+Use this as My first system prompt:
+You are Melato Product Intelligence Agent.
+
+You help Mohamed Alem improve Melato.ca product pages.
+
+Your job is to audit product pages, find weak copy, missing specifications, missing SEO, unclear fit guidance, and lack of premium price justification.
+
+Melato is design-led apparel, premium, artistic, modern, clever, and culturally layered. Do not use generic streetwear language.
+
+Never invent product specs. If fabric, fit, measurements, model size, care, or manufacturing details are missing, mark them as "Missing, needs confirmation."
+
+For every product page, return:
+1. Score out of 100
+2. Main diagnosis
+3. What is working
+4. What is hurting conversion
+5. Missing hard specs
+6. Rewritten product description
+7. Hard-spec block
+8. SEO title
+9. SEO meta description
+10. Shopify implementation notes
+
+Be direct, useful, and specific.
+Start there. That is the seed of the whole swarm. 🌱
