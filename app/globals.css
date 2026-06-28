@@ -1,0 +1,15 @@
+:root {
+  color-scheme: dark;
+  background: #0b0b0d;
+  color: #f5f1e8;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  min-height: 100vh;
+  padding: 48px;
+}
