@@ -1,148 +1,23 @@
 import {
-  careerAgentPrompt,
-  conciergeAgentPrompt,
-  creativeDirectorAgentPrompt,
-  financeAgentPrompt,
-  orchestratorPrompt,
-  productPageAgentPrompt,
-  shopifyOpsAgentPrompt,
-  trendRadarAgentPrompt,
-  visualQAAgentPrompt,
-} from "../../../agents";
+  AIProviderConfigurationError,
+  AIProviderError,
+} from "../../../lib/ai/contracts";
+import { createAIProvider } from "../../../lib/ai/provider-factory";
+import { ChatServiceError, runChat } from "../../../lib/chat/chat-service";
+import {
+  createExecutionRepository,
+  ExecutionRepositoryConfigurationError,
+} from "../../../lib/execution/execution-repository-factory";
+import { createStructuredLogger } from "../../../lib/observability/structured-logger";
 import { loadMemory } from "../../../memory/loadMemory";
 
-type RoutePlan = {
-  agent: string;
-  risk_level: number;
-  reason: string;
-  needed_tools: string[];
-  user_intent: string;
-  approval_required: boolean;
-};
-
-type AnthropicTextBlock = {
-  type: "text";
-  text: string;
-};
-
-type AnthropicResponse = {
-  content: AnthropicTextBlock[];
-};
-
 const MAX_MESSAGE_LENGTH = 10_000;
-const ANTHROPIC_TIMEOUT_MS = 30_000;
-
-class UpstreamError extends Error {
-  constructor(
-    message: string,
-    readonly status: number = 502,
-  ) {
-    super(message);
-  }
-}
-
-const agentPrompts: Record<string, string> = {
-  product_page_agent: productPageAgentPrompt,
-  creative_director_agent: creativeDirectorAgentPrompt,
-  shopify_ops_agent: shopifyOpsAgentPrompt,
-  visual_qa_agent: visualQAAgentPrompt,
-  concierge_agent: conciergeAgentPrompt,
-  trend_radar_agent: trendRadarAgentPrompt,
-  finance_agent: financeAgentPrompt,
-  career_agent: careerAgentPrompt,
-  general_life_admin_agent: careerAgentPrompt,
-};
-
-function isRoutePlan(value: unknown): value is RoutePlan {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const route = value as Partial<RoutePlan>;
-
-  return (
-    typeof route.agent === "string" &&
-    typeof route.risk_level === "number" &&
-    route.risk_level >= 1 &&
-    route.risk_level <= 4 &&
-    typeof route.reason === "string" &&
-    Array.isArray(route.needed_tools) &&
-    route.needed_tools.every((tool) => typeof tool === "string") &&
-    typeof route.user_intent === "string" &&
-    typeof route.approval_required === "boolean" &&
-    route.approval_required === (route.risk_level >= 3)
-  );
-}
-
-async function createClaudeMessage(system: string, message: string, maxTokens: number) {
-  let response: Response;
-
-  try {
-    response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8",
-        max_tokens: maxTokens,
-        system,
-        messages: [{ role: "user", content: message }],
-      }),
-      signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),
-    });
-  } catch (error) {
-    const message = error instanceof Error && error.name === "TimeoutError"
-      ? "AI provider request timed out"
-      : "AI provider could not be reached";
-    throw new UpstreamError(message, 503);
-  }
-
-  if (!response.ok) {
-    throw new UpstreamError(`AI provider returned status ${response.status}`);
-  }
-
-  let payload: Partial<AnthropicResponse>;
-  try {
-    payload = (await response.json()) as Partial<AnthropicResponse>;
-  } catch {
-    throw new UpstreamError("AI provider returned malformed JSON");
-  }
-
-  if (
-    !Array.isArray(payload.content) ||
-    !payload.content.every(
-      (block) => block && block.type === "text" && typeof block.text === "string",
-    )
-  ) {
-    throw new UpstreamError("AI provider returned an invalid response");
-  }
-
-  return payload as AnthropicResponse;
-}
-
-function getTextContent(response: AnthropicResponse) {
-  return response.content.find((block) => block.type === "text")?.text ?? "";
-}
-
-function parseRoutePlan(text: string): unknown {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  const candidate = fenced?.[1] ?? trimmed;
-
-  try {
-    return JSON.parse(candidate) as unknown;
-  } catch {
-    throw new UpstreamError("Orchestrator returned malformed routing data");
-  }
-}
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return Response.json({ error: "ANTHROPIC_API_KEY is not configured" }, { status: 500 });
-  }
+  const runId = crypto.randomUUID();
+  const startedAt = Date.now();
+  const configuredProvider = process.env.AI_PROVIDER ?? "anthropic";
+  const logger = createStructuredLogger();
 
   let body: { message?: unknown };
   try {
@@ -164,30 +39,53 @@ export async function POST(req: Request) {
   }
 
   try {
-    const routeResponse = await createClaudeMessage(orchestratorPrompt, message, 1000);
-    const parsedRoute = parseRoutePlan(getTextContent(routeResponse));
+    const provider = createAIProvider(process.env);
+    const repository = createExecutionRepository(process.env);
+    const result = await runChat({
+      message,
+      provider,
+      loadMemory,
+      repository,
+    });
+    logger.record({
+      event: "chat.request.completed",
+      runId,
+      agent: result.route.agent,
+      route: result.route.agent,
+      provider: result.provider,
+      riskLevel: result.route.risk_level,
+      durationMs: Date.now() - startedAt,
+      outcome: "succeeded",
+    });
 
-    if (!isRoutePlan(parsedRoute)) {
-      throw new UpstreamError("Orchestrator returned an invalid route");
-    }
-
-    const selectedPrompt = agentPrompts[parsedRoute.agent];
-
-    if (!selectedPrompt) {
-      throw new UpstreamError("Orchestrator selected an unknown agent");
-    }
-
-    const agentResponse = await createClaudeMessage(`${loadMemory()}\n\n${selectedPrompt}`, message, 4000);
-    const output = getTextContent(agentResponse);
-    if (!output) {
-      throw new UpstreamError("Specialist agent returned an empty response");
-    }
-
-    return Response.json({ route: parsedRoute, output });
+    return Response.json({
+      route: result.route,
+      output: result.output,
+      provider: result.provider,
+      model: result.model,
+    });
   } catch (error) {
-    console.error("Chat request failed", error);
-    const status = error instanceof UpstreamError ? error.status : 500;
-    const message = error instanceof UpstreamError ? error.message : "An unexpected error occurred";
+    const status = error instanceof AIProviderError ||
+      error instanceof AIProviderConfigurationError ||
+      error instanceof ExecutionRepositoryConfigurationError ||
+      error instanceof ChatServiceError
+      ? error.status
+      : 500;
+    const message = error instanceof AIProviderError ||
+      error instanceof AIProviderConfigurationError ||
+      error instanceof ExecutionRepositoryConfigurationError ||
+      error instanceof ChatServiceError
+      ? error.message
+      : "An unexpected error occurred";
+
+    logger.record({
+      event: "chat.request.failed",
+      runId,
+      provider: configuredProvider,
+      durationMs: Date.now() - startedAt,
+      outcome: "failed",
+    });
+
     return Response.json({ error: message }, { status });
   }
 }

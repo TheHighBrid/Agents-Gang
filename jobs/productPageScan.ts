@@ -1,9 +1,9 @@
-import { getShopifyProducts } from "../tools/shopify";
+import type { ToolExecutionContext } from "../lib/execution/tool-execution";
+import { runShopifyProductRead, type ShopifyProductsReader } from "../tools/shopify-products-tool";
 
-export async function runProductPageScan() {
-  const products = await getShopifyProducts(50);
-
-  // Next step: send each product node to the Product Page Agent, save the audit,
-  // and create approval tasks when scores fall below the configured threshold.
-  return products;
+export function runProductPageScan(
+  context: ToolExecutionContext,
+  reader?: ShopifyProductsReader,
+) {
+  return runShopifyProductRead(context, { first: 50 }, reader);
 }
