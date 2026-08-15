@@ -1,25 +1,37 @@
-# Agents-Gang
+# Agents-Gang / Melato OS
 
-Melato Agent Swarm / Melato OS is a private squad of specialist agents for product-page audits, creative direction, Shopify operations, visual QA, concierge support, trend radar, finance, and career/life administration.
+Melato OS is a private, specialist-agent operating system for product-page audits, creative direction, Shopify operations, visual QA, concierge support, trend research, finance, and career administration. The current implementation is a **governed execution foundation**: requests are routed through a provider-neutral AI boundary, high-risk tool calls are approval-gated in code, and executions are designed to persist a reviewable audit trail.
 
 ## Phase 1 MVP
 
-The current build focuses on a safe read/draft-only agent brain:
+Apply `db/schema.sql` to a fresh Supabase project. Existing deployments should first apply `db/migrations/20260815_governed_execution_up.sql`. The paired `20260815_governed_execution_down.sql` reverses the migration; use it only after confirming no governed-execution records must be retained.
 
-1. A user sends a message to `/api/chat`.
-2. The Orchestrator routes the request to the best specialist agent.
-3. The selected specialist replies with a structured result.
-4. No external Shopify, Gmail, calendar, or database actions are executed automatically.
+## Validation
 
-## Setup
+Run all checks before opening a pull request or declaring a change complete.
 
 ```bash
-npm install
-cp .env.example .env
-npm run dev
+npm run lint
+npm run typecheck
+npm run build
+npm test
 ```
 
-Fill `.env` with real credentials locally. Do not commit `.env`.
+The test suite covers provider timeout normalization, provider configuration, malformed orchestrator routing, unknown agents, durable run and routing-decision recording, risk-level validation, expired approval rejection, approval lifecycle transitions, high-risk approval and target binding, structured tool failures, Shopify reference-tool execution, scheduled-job contract reuse, Supabase request mapping, and payload-safe structured logging.
+
+## Execution model
+
+A typical governed operation follows this sequence:
+
+1. The orchestrator produces a validated route plan with an agent, risk level, and required tools.
+2. The chat service creates an agent run and routing decision in the configured execution repository.
+3. A tool is declared with a capability class: `read`, `draft`, `prepare`, or `execute`.
+4. For risk level 3 or 4, the runner loads the referenced approval from durable storage and validates its status, action, target, and expiry.
+5. The runner writes a `tool_calls` record and a structured `audit_events` record for blocked, failed, and successful outcomes.
+
+The current product-page scan job invokes Shopify through this same tool contract; it no longer calls the Shopify adapter directly.
+
+## Execution roadmap
 
 `ANTHROPIC_MODEL` is optional and lets deployments select a different model
 without a code change. The chat endpoint accepts JSON in the form
@@ -27,7 +39,12 @@ without a code change. The chat endpoint accepts JSON in the form
 time out after 30 seconds and return a structured JSON error if routing or the
 provider response is invalid.
 
-## Safety Defaults
+1. Build authenticated approval APIs and make the approvals dashboard display and decide persisted approval records.
+2. Route each remaining real adapter and scheduled job through the common execution contract.
+3. Add a production migration runner and deployment-level Supabase verification.
+4. Add real tool adapters and capability policies for Shopify draft updates, Gmail, Calendar, image audit, and web search.
+5. Expand the dashboard with persisted run, routing, approval, and audit-event state.
+6. Add additional AI providers only through documented, supported provider adapters.
 
 - Default risk level is read-only or draft-only.
 - Shopify publishing requires approval.

@@ -1,23 +1,18 @@
+begin;
+
 create extension if not exists pgcrypto;
 
-create table if not exists approval_requests (
-  id uuid primary key default gen_random_uuid(),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  agent_name text not null,
-  action_type text not null,
-  target_type text,
-  target_id text,
-  risk_level integer not null check (risk_level between 1 and 4),
-  title text,
-  current_value text,
-  proposed_value text,
-  payload_summary text,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'expired')),
-  decided_at timestamptz,
-  expires_at timestamptz,
-  result text
-);
+alter table approval_requests
+  add column if not exists target_type text,
+  add column if not exists target_id text,
+  add column if not exists payload_summary text,
+  add column if not exists updated_at timestamptz not null default now(),
+  add column if not exists decided_at timestamptz,
+  add column if not exists expires_at timestamptz,
+  add column if not exists result text;
+
+alter table approval_requests
+  alter column status set default 'pending';
 
 create index if not exists approval_requests_status_created_at_idx
   on approval_requests (status, created_at desc);
@@ -86,25 +81,4 @@ create table if not exists audit_events (
 
 create index if not exists audit_events_run_id_idx on audit_events (run_id, created_at desc);
 
-create table if not exists product_audits (
-  id uuid primary key default gen_random_uuid(),
-  created_at timestamptz not null default now(),
-  shopify_product_id text,
-  product_title text,
-  handle text,
-  score integer,
-  diagnosis text,
-  missing_specs jsonb,
-  rewritten_description text,
-  seo_title text,
-  seo_description text,
-  status text not null default 'draft'
-);
-
-create table if not exists brand_memory (
-  id uuid primary key default gen_random_uuid(),
-  created_at timestamptz not null default now(),
-  category text not null,
-  title text not null,
-  content text not null
-);
+commit;
