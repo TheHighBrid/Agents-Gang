@@ -21,6 +21,12 @@ npm run dev
 
 Fill `.env` with real credentials locally. Do not commit `.env`.
 
+`ANTHROPIC_MODEL` is optional and lets deployments select a different model
+without a code change. The chat endpoint accepts JSON in the form
+`{"message":"..."}` and limits messages to 10,000 characters. Provider calls
+time out after 30 seconds and return a structured JSON error if routing or the
+provider response is invalid.
+
 ## Safety Defaults
 
 - Default risk level is read-only or draft-only.

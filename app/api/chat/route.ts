@@ -29,6 +29,18 @@ type AnthropicResponse = {
   content: AnthropicTextBlock[];
 };
 
+const MAX_MESSAGE_LENGTH = 10_000;
+const ANTHROPIC_TIMEOUT_MS = 30_000;
+
+class UpstreamError extends Error {
+  constructor(
+    message: string,
+    readonly status: number = 502,
+  ) {
+    super(message);
+  }
+}
+
 const agentPrompts: Record<string, string> = {
   product_page_agent: productPageAgentPrompt,
   creative_director_agent: creativeDirectorAgentPrompt,
@@ -57,35 +69,74 @@ function isRoutePlan(value: unknown): value is RoutePlan {
     Array.isArray(route.needed_tools) &&
     route.needed_tools.every((tool) => typeof tool === "string") &&
     typeof route.user_intent === "string" &&
-    typeof route.approval_required === "boolean"
+    typeof route.approval_required === "boolean" &&
+    route.approval_required === (route.risk_level >= 3)
   );
 }
 
 async function createClaudeMessage(system: string, message: string, maxTokens: number) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-opus-4-8",
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: "user", content: message }],
-    }),
-  });
+  let response: Response;
 
-  if (!response.ok) {
-    throw new Error(`Anthropic API error: ${response.status}`);
+  try {
+    response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8",
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: "user", content: message }],
+      }),
+      signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const message = error instanceof Error && error.name === "TimeoutError"
+      ? "AI provider request timed out"
+      : "AI provider could not be reached";
+    throw new UpstreamError(message, 503);
   }
 
-  return (await response.json()) as AnthropicResponse;
+  if (!response.ok) {
+    throw new UpstreamError(`AI provider returned status ${response.status}`);
+  }
+
+  let payload: Partial<AnthropicResponse>;
+  try {
+    payload = (await response.json()) as Partial<AnthropicResponse>;
+  } catch {
+    throw new UpstreamError("AI provider returned malformed JSON");
+  }
+
+  if (
+    !Array.isArray(payload.content) ||
+    !payload.content.every(
+      (block) => block && block.type === "text" && typeof block.text === "string",
+    )
+  ) {
+    throw new UpstreamError("AI provider returned an invalid response");
+  }
+
+  return payload as AnthropicResponse;
 }
 
 function getTextContent(response: AnthropicResponse) {
   return response.content.find((block) => block.type === "text")?.text ?? "";
+}
+
+function parseRoutePlan(text: string): unknown {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const candidate = fenced?.[1] ?? trimmed;
+
+  try {
+    return JSON.parse(candidate) as unknown;
+  } catch {
+    throw new UpstreamError("Orchestrator returned malformed routing data");
+  }
 }
 
 export async function POST(req: Request) {
@@ -93,30 +144,50 @@ export async function POST(req: Request) {
     return Response.json({ error: "ANTHROPIC_API_KEY is not configured" }, { status: 500 });
   }
 
-  const body = (await req.json()) as { message?: unknown };
+  let body: { message?: unknown };
+  try {
+    body = (await req.json()) as { message?: unknown };
+  } catch {
+    return Response.json({ error: "Request body must be valid JSON" }, { status: 400 });
+  }
 
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
     return Response.json({ error: "Request body must include a non-empty message" }, { status: 400 });
   }
 
-  const routeResponse = await createClaudeMessage(orchestratorPrompt, body.message, 1000);
-  const routeText = getTextContent(routeResponse);
-  const parsedRoute = JSON.parse(routeText) as unknown;
-
-  if (!isRoutePlan(parsedRoute)) {
-    return Response.json({ error: "Orchestrator returned an invalid route", routeText }, { status: 502 });
+  const message = body.message.trim();
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return Response.json(
+      { error: `Message must be ${MAX_MESSAGE_LENGTH.toLocaleString()} characters or fewer` },
+      { status: 413 },
+    );
   }
 
-  const selectedPrompt = agentPrompts[parsedRoute.agent];
+  try {
+    const routeResponse = await createClaudeMessage(orchestratorPrompt, message, 1000);
+    const parsedRoute = parseRoutePlan(getTextContent(routeResponse));
 
-  if (!selectedPrompt) {
-    return Response.json({ error: "No valid agent selected", route: parsedRoute }, { status: 400 });
+    if (!isRoutePlan(parsedRoute)) {
+      throw new UpstreamError("Orchestrator returned an invalid route");
+    }
+
+    const selectedPrompt = agentPrompts[parsedRoute.agent];
+
+    if (!selectedPrompt) {
+      throw new UpstreamError("Orchestrator selected an unknown agent");
+    }
+
+    const agentResponse = await createClaudeMessage(`${loadMemory()}\n\n${selectedPrompt}`, message, 4000);
+    const output = getTextContent(agentResponse);
+    if (!output) {
+      throw new UpstreamError("Specialist agent returned an empty response");
+    }
+
+    return Response.json({ route: parsedRoute, output });
+  } catch (error) {
+    console.error("Chat request failed", error);
+    const status = error instanceof UpstreamError ? error.status : 500;
+    const message = error instanceof UpstreamError ? error.message : "An unexpected error occurred";
+    return Response.json({ error: message }, { status });
   }
-
-  const agentResponse = await createClaudeMessage(`${loadMemory()}\n\n${selectedPrompt}`, body.message, 4000);
-
-  return Response.json({
-    route: parsedRoute,
-    output: getTextContent(agentResponse),
-  });
 }
