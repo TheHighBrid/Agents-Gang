@@ -1,3 +1,5 @@
+import { ToolExecutionError } from "../lib/execution/tool-execution";
+
 const SHOPIFY_STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN;
 const SHOPIFY_ADMIN_ACCESS_TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
 
@@ -5,23 +7,43 @@ type ShopifyVariables = Record<string, unknown>;
 
 export async function shopifyGraphQL(query: string, variables: ShopifyVariables = {}) {
   if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ADMIN_ACCESS_TOKEN) {
-    throw new Error("Shopify credentials are not configured");
+    throw new ToolExecutionError("shopify_not_configured", "Shopify integration is not configured.", false);
   }
 
-  const response = await fetch(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2026-04/graphql.json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": SHOPIFY_ADMIN_ACCESS_TOKEN,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2026-04/graphql.json`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": SHOPIFY_ADMIN_ACCESS_TOKEN,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch {
+    throw new ToolExecutionError("shopify_upstream_unavailable", "Shopify is temporarily unavailable.", true);
+  }
 
+  if (response.status === 429) {
+    throw new ToolExecutionError("shopify_rate_limited", "Shopify request was rate limited.", true);
+  }
+  if (response.status >= 500) {
+    throw new ToolExecutionError("shopify_upstream_unavailable", "Shopify is temporarily unavailable.", true);
+  }
   if (!response.ok) {
-    throw new Error(`Shopify API error: ${response.status}`);
+    throw new ToolExecutionError("shopify_request_failed", "Shopify rejected the request.", false);
   }
 
-  return response.json();
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new ToolExecutionError("shopify_response_invalid", "Shopify returned an invalid response.", true);
+  }
+  if (body && typeof body === "object" && "errors" in body && Array.isArray((body as { errors?: unknown }).errors) && (body as { errors: unknown[] }).errors.length > 0) {
+    throw new ToolExecutionError("shopify_request_failed", "Shopify rejected the request.", false);
+  }
+  return body;
 }
 
 export async function getShopifyCustomers(input: { first: number; query?: string }) {

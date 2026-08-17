@@ -20,19 +20,37 @@ export type ToolExecutionContext = {
   approvalId?: string;
 };
 
+export type ToolErrorCode =
+  | "approval_required"
+  | "approval_not_approved"
+  | "approval_expired"
+  | "invalid_input"
+  | "tool_execution_failed"
+  | "shopify_not_configured"
+  | "shopify_rate_limited"
+  | "shopify_upstream_unavailable"
+  | "shopify_request_failed"
+  | "shopify_response_invalid";
+
 export type ToolFailure = {
   ok: false;
   error: {
-    code:
-      | "approval_required"
-      | "approval_not_approved"
-      | "approval_expired"
-      | "invalid_input"
-      | "tool_execution_failed";
+    code: ToolErrorCode;
     message: string;
     retriable: boolean;
   };
 };
+
+export class ToolExecutionError extends Error {
+  constructor(
+    public readonly code: ToolErrorCode,
+    message: string,
+    public readonly retriable: boolean,
+  ) {
+    super(message);
+    this.name = "ToolExecutionError";
+  }
+}
 
 export type ToolSuccess<Output> = {
   ok: true;
@@ -163,7 +181,13 @@ export async function executeTool<Input, Output>(
     });
     return { ok: true, data };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Tool execution failed.";
+    const failure = error instanceof ToolExecutionError
+      ? error
+      : new ToolExecutionError(
+        "tool_execution_failed",
+        error instanceof Error ? error.message : "Tool execution failed.",
+        true,
+      );
     await context.repository.recordToolCall({
       runId: context.runId,
       agentName: context.agentName,
@@ -172,7 +196,7 @@ export async function executeTool<Input, Output>(
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
       outcome: "failed",
-      errorCode: "tool_execution_failed",
+      errorCode: failure.code,
     });
     await context.repository.recordAuditEvent({
       runId: context.runId,
@@ -182,11 +206,11 @@ export async function executeTool<Input, Output>(
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "failed",
-      metadata: { errorCode: "tool_execution_failed" },
+      metadata: { errorCode: failure.code },
     });
     return {
       ok: false,
-      error: { code: "tool_execution_failed", message, retriable: true },
+      error: { code: failure.code, message: failure.message, retriable: failure.retriable },
     };
   }
 }
