@@ -1,10 +1,11 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createInMemoryExecutionRepository } from "../lib/execution/repository";
 import { runInboxTriageJob } from "../jobs/inboxTriage";
 
 describe("inbox triage scheduled job", () => {
   test("reads inbox messages through the governed Gmail adapter", async () => {
     const repository = createInMemoryExecutionRepository({ idFactory: () => "inbox-run-1" });
+    const notifier = vi.fn().mockResolvedValue(undefined);
     const result = await runInboxTriageJob(
       repository,
       async (query, maxResults) => [{
@@ -19,12 +20,15 @@ describe("inbox triage scheduled job", () => {
         query,
         maxResults,
       }],
+      notifier,
     );
 
     expect(result.data.messages).toMatchObject([{ id: "m1", priority: "high", category: "action_required" }]);
     await expect(repository.listToolCalls()).resolves.toMatchObject([
       { runId: "inbox-run-1", toolName: "gmail.messages.search", outcome: "succeeded" },
+      { runId: "inbox-run-1", toolName: "inbox.alert.send", capability: "execute", riskLevel: 2, outcome: "succeeded" },
     ]);
+    expect(notifier).toHaveBeenCalledWith([expect.not.objectContaining({ snippet: expect.anything() })]);
     await expect(repository.listAgentRuns()).resolves.toMatchObject([
       { id: "inbox-run-1", agentName: "inbox_triage_agent", status: "completed" },
     ]);

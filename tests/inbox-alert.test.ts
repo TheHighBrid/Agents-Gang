@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
-import { notifyHighPriorityMessages } from "../tools/inbox-alert";
+import { notifyHighPriorityMessages, runInboxAlert } from "../tools/inbox-alert";
 import type { TriagedMessage } from "../jobs/inboxTriage";
+import { createInMemoryExecutionRepository } from "../lib/execution/repository";
 
 describe("inbox high-priority alerts", () => {
   const message: TriagedMessage = {
@@ -27,5 +28,18 @@ describe("inbox high-priority alerts", () => {
     const notifier = vi.fn();
     await expect(notifyHighPriorityMessages([{ ...message, priority: "normal" }], notifier)).resolves.toEqual({ sent: 0, skipped: 1 });
     expect(notifier).not.toHaveBeenCalled();
+  });
+
+  test("routes alert delivery through the governed tool boundary", async () => {
+    const repository = createInMemoryExecutionRepository();
+    const notifier = vi.fn().mockResolvedValue(undefined);
+    const alert = { ...message };
+
+    await expect(runInboxAlert({ repository, runId: "run-1", agentName: "inbox_triage_agent" }, [alert], notifier))
+      .resolves.toEqual({ ok: true, data: { sent: 1 } });
+    expect(notifier).toHaveBeenCalledWith([expect.not.objectContaining({ snippet: expect.anything() })]);
+    await expect(repository.listToolCalls()).resolves.toMatchObject([
+      { runId: "run-1", toolName: "inbox.alert.send", capability: "execute", riskLevel: 2, outcome: "succeeded" },
+    ]);
   });
 });
