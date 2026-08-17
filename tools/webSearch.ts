@@ -1,38 +1,82 @@
-import type { ToolExecutionContext } from "../lib/execution/tool-execution";
-import { defineTool, executeTool } from "../lib/execution/tool-execution";
+export type WebSearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+};
 
-export type WebSearchReader<Result = unknown> = (query: string) => Promise<Result>;
-type WebSearchInput = { query: string };
+type SearchFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-function parseWebSearchInput(input: unknown): WebSearchInput {
-  if (!input || typeof input !== "object" || !("query" in input)) {
-    throw new Error("query is required");
+export type WebSearchOptions = {
+  apiKey?: string;
+  endpoint?: string;
+  limit?: number;
+  fetcher?: SearchFetcher;
+};
+
+export class WebSearchConfigurationError extends Error {
+  readonly status = 503;
+  constructor(message = "Web search is not configured") {
+    super(message);
+    this.name = "WebSearchConfigurationError";
   }
-  const query = (input as { query: unknown }).query;
-  if (typeof query !== "string" || query.trim().length < 1 || query.length > 500) {
-    throw new Error("query must be a non-empty string of at most 500 characters");
+}
+
+export class WebSearchRequestError extends Error {
+  readonly status: number;
+  constructor(message: string, status = 502) {
+    super(message);
+    this.name = "WebSearchRequestError";
+    this.status = status;
   }
-  return { query: query.trim() };
 }
 
-export function createWebSearchTool<Result>(reader: WebSearchReader<Result>) {
-  return defineTool({
-    name: "web.search",
-    capability: "read" as const,
-    riskLevel: 1 as const,
-    parseInput: parseWebSearchInput,
-    execute: ({ query }: WebSearchInput) => reader(query),
-  });
-}
+export async function webSearch(query: string, options: WebSearchOptions = {}): Promise<WebSearchResult[]> {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    throw new Error("Search query is required");
+  }
+  if (normalizedQuery.length > 200) {
+    throw new Error("Search query must be 200 characters or fewer");
+  }
 
-export function runWebSearch<Result>(
-  context: ToolExecutionContext,
-  query: string,
-  reader: WebSearchReader<Result>,
-) {
-  return executeTool(context, createWebSearchTool(reader), { query });
-}
+  const apiKey = (options.apiKey ?? process.env.BRAVE_SEARCH_API_KEY ?? "").trim();
+  if (!apiKey) {
+    throw new WebSearchConfigurationError("BRAVE_SEARCH_API_KEY is required for web search");
+  }
 
-export async function webSearch() {
-  throw new Error("Web search requires an injected authenticated reader");
+  const limit = Math.min(10, Math.max(1, Math.floor(options.limit ?? 5)));
+  const endpoint = options.endpoint ?? "https://api.search.brave.com/res/v1/web/search";
+  const url = new URL(endpoint);
+  url.searchParams.set("q", normalizedQuery);
+  url.searchParams.set("count", String(limit));
+  const fetcher = options.fetcher ?? fetch;
+
+  let response: Response;
+  try {
+    response = await fetcher(url.toString(), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "X-Subscription-Token": apiKey,
+      },
+    });
+  } catch (error) {
+    throw new WebSearchRequestError(error instanceof Error ? error.message : "Web search request failed");
+  }
+
+  if (!response.ok) {
+    throw new WebSearchRequestError(`Web search provider returned ${response.status}`, response.status >= 500 ? 502 : response.status);
+  }
+
+  const payload = (await response.json()) as {
+    web?: { results?: Array<{ title?: unknown; url?: unknown; description?: unknown }> };
+  };
+  return (payload.web?.results ?? [])
+    .filter((result) => typeof result.title === "string" && typeof result.url === "string")
+    .slice(0, limit)
+    .map((result) => ({
+      title: result.title as string,
+      url: result.url as string,
+      snippet: typeof result.description === "string" ? result.description : "",
+    }));
 }

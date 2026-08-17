@@ -13,7 +13,7 @@ create table if not exists approval_requests (
   current_value text,
   proposed_value text,
   payload_summary text,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'expired')),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'expired', 'consumed')),
   decided_at timestamptz,
   expires_at timestamptz,
   result text

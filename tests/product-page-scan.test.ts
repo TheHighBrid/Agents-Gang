@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { createInMemoryExecutionRepository } from "../lib/execution/repository";
-import { runProductPageScan, runScheduledProductPageScan } from "../jobs/productPageScan";
+import { runProductPageScan, runProductPageScanJob } from "../jobs/productPageScan";
 
 describe("product-page scan job", () => {
   test("uses the governed Shopify read contract for scheduled scans", async () => {
@@ -31,28 +31,19 @@ describe("product-page scan job", () => {
 });
 
 
-test("runs a scheduled scan through the durable job lifecycle", async () => {
-  const repository = createInMemoryExecutionRepository({ idFactory: () => "scheduled-run-1" });
+test("wraps scheduled scans in the governed job lifecycle", async () => {
+  const repository = createInMemoryExecutionRepository({ idFactory: () => "scheduled-run-2" });
 
-  const result = await runScheduledProductPageScan(
+  const result = await runProductPageScanJob(
     repository,
     async (first) => ({ products: [{ id: "product-1" }], first }),
   );
 
-  expect(result.data).toEqual({ products: [{ id: "product-1" }], first: 50 });
+  expect(result.data).toEqual({ ok: true, data: { products: [{ id: "product-1" }], first: 50 } });
   await expect(repository.listAgentRuns()).resolves.toMatchObject([
-    { id: "scheduled-run-1", agentName: "product_page_agent", status: "completed" },
+    { id: "scheduled-run-2", agentName: "product_page_agent", status: "completed" },
   ]);
   await expect(repository.listRoutingDecisions()).resolves.toMatchObject([
-    { runId: "scheduled-run-1", selectedAgent: "product_page_agent" },
+    { runId: "scheduled-run-2", selectedAgent: "product_page_agent", neededTools: ["shopify.products.read"] },
   ]);
-  await expect(repository.listAuditEvents()).resolves.toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        runId: "scheduled-run-1",
-        eventType: "scheduled_job.completed",
-        outcome: "succeeded",
-      }),
-    ]),
-  );
 });

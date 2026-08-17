@@ -1,58 +1,19 @@
-import { createExecutionRepository } from "../../../lib/execution/execution-repository-factory";
+import { createExecutionRepository, ExecutionRepositoryConfigurationError } from "../../../lib/execution/execution-repository-factory";
+import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../lib/approvals/auth";
+import { getApprovalListResponse } from "../../../lib/approvals/approval-api";
 
-const invalidDecisionMessage =
-  "approvalId, status, and result are required; status must be approved or rejected";
-
-export async function GET() {
+export async function GET(request: Request) {
+  const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
+  if (authorization) return authorization;
   try {
-    const repository = createExecutionRepository(process.env);
-    const approvals = await repository.listApprovals();
-    return Response.json({ approvals });
+    return await getApprovalListResponse(createExecutionRepository(process.env), request.url);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Unable to load approvals" },
-      { status: 500 },
-    );
-  }
-}
-
-export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: invalidDecisionMessage }, { status: 400 });
-  }
-
-  if (!body || typeof body !== "object") {
-    return Response.json({ error: invalidDecisionMessage }, { status: 400 });
-  }
-
-  const input = body as Record<string, unknown>;
-  const approvalId = typeof input.approvalId === "string" ? input.approvalId.trim() : "";
-  const status = input.status;
-  const result = typeof input.result === "string" ? input.result.trim() : "";
-
-  if (
-    !approvalId ||
-    (status !== "approved" && status !== "rejected") ||
-    !result
-  ) {
-    return Response.json({ error: invalidDecisionMessage }, { status: 400 });
-  }
-
-  try {
-    const repository = createExecutionRepository(process.env);
-    const approval = await repository.decideApproval({
-      approvalId,
-      status,
-      result,
-    });
-    return Response.json({ approval });
-  } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Unable to decide approval" },
-      { status: 409 },
-    );
+    if (error instanceof ExecutionRepositoryConfigurationError) {
+      return Response.json({ error: "Approval storage is not configured" }, { status: 503 });
+    }
+    if (error instanceof Error && /invalid|must|too long/i.test(error.message)) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    return Response.json({ error: "Unable to load approvals" }, { status: 500 });
   }
 }

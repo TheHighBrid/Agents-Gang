@@ -1,6 +1,5 @@
 import type { ToolExecutionContext } from "../lib/execution/tool-execution";
-import type { ExecutionRepository } from "../lib/execution/repository";
-import { runScheduledJob } from "./scheduledJobRunner";
+import { runGovernedJob } from "./governedJob";
 import { runShopifyProductRead, type ShopifyProductsReader } from "../tools/shopify-products-tool";
 
 export function runProductPageScan(
@@ -10,30 +9,16 @@ export function runProductPageScan(
   return runShopifyProductRead(context, { first: 50 }, reader);
 }
 
-export function runScheduledProductPageScan(
-  repository: ExecutionRepository,
+export function runProductPageScanJob(
+  repository: ToolExecutionContext["repository"],
   reader?: ShopifyProductsReader,
 ) {
-  return runScheduledJob(repository, {
-    idempotencyKey: "scheduled-product-page-scan",
+  return runGovernedJob({
+    repository,
     agentName: "product_page_agent",
-    provider: "system",
-    model: "governed-tool-runner",
-    routeAgent: "product_page_agent",
-    riskLevel: 1,
-    inputSummary: "Scheduled product-page scan.",
-    reason: "The daily schedule requested a governed Shopify product-page scan.",
+    inputSummary: "Scheduled product-page scan",
+    reason: "Scheduled product-page audit",
     neededTools: ["shopify.products.read"],
-    execute: async ({ runId, correlationId }) => {
-      const result = await runProductPageScan(
-        { repository, runId, agentName: "product_page_agent", correlationId },
-        reader,
-      );
-      if (!result.ok) {
-        throw new Error(result.error.message);
-      }
-      return result.data;
-    },
-    summarize: () => "Product-page scan completed.",
+    execute: (context) => runProductPageScan(context, reader),
   });
 }

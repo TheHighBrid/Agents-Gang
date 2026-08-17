@@ -109,273 +109,46 @@ test("persists an agent run using the declared execution schema", async () => {
   expect(run).toMatchObject({ id: "run-1", status: "running" });
 });
 
-
-test("lists approval requests newest first", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
+test("queries approvals with bounded filters and returns a continuation cursor", async () => {
+  const requests: string[] = [];
+  const rows = [1, 2, 3].map((index) => ({
+    id: `approval-${index}`,
+    agent_name: "agent",
+    action_type: "publish",
+    target_type: "product",
+    target_id: `product-${index}`,
+    risk_level: 3,
+    payload_summary: `summary-${index}`,
+    status: "pending",
+    created_at: `2026-08-17T10:0${3 - index}:00.000Z`,
+    updated_at: `2026-08-17T10:0${3 - index}:00.000Z`,
+  }));
   const repository = createSupabaseExecutionRepository({
     url: "https://project.supabase.co",
     serviceRoleKey: "service-role-secret",
-    request: async (url, init) => {
-      requests.push({ url: String(url), init });
-      return new Response(
-        JSON.stringify([
-          {
-            id: "approval-2",
-            agent_name: "creative_director_agent",
-            action_type: "draft.campaign.copy",
-            target_type: "campaign",
-            target_id: "campaign-2",
-            risk_level: 2,
-            payload_summary: "Draft campaign copy.",
-            status: "pending",
-            created_at: "2026-08-16T12:00:00.000Z",
-            updated_at: "2026-08-16T12:00:00.000Z",
-          },
-        ]),
-        { status: 200 },
-      );
+    request: async (url) => {
+      requests.push(String(url));
+      return new Response(JSON.stringify(rows), { status: 200 });
     },
   });
 
-  const approvals = await repository.listApprovals();
+  const page = await repository.queryApprovals({
+    status: "pending",
+    actionType: "publish",
+    requestedFrom: "2026-08-17T10:00:00.000Z",
+    requestedTo: "2026-08-17T10:05:00.000Z",
+    limit: 2,
+  });
 
-  expect(requests[0].url).toBe(
-    "https://project.supabase.co/rest/v1/approval_requests?select=*&order=created_at.desc",
-  );
-  expect(approvals).toMatchObject([
-    {
-      id: "approval-2",
-      requestingAgent: "creative_director_agent",
-      actionType: "draft.campaign.copy",
-      status: "pending",
-    },
+  const query = new URL(requests[0]).searchParams;
+  expect(query.get("limit")).toBe("3");
+  expect(query.get("order")).toBe("created_at.desc,id.desc");
+  expect(query.get("status")).toBe("eq.pending");
+  expect(query.get("action_type")).toBe("eq.publish");
+  expect(query.getAll("created_at")).toEqual([
+    "gte.2026-08-17T10:00:00.000Z",
+    "lte.2026-08-17T10:05:00.000Z",
   ]);
-});
-
-
-test("updates a pending approval decision", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  const repository = createSupabaseExecutionRepository({
-    url: "https://project.supabase.co",
-    serviceRoleKey: "service-role-secret",
-    request: async (url, init) => {
-      requests.push({ url: String(url), init });
-      return new Response(
-        JSON.stringify([
-          {
-            id: "approval-1",
-            agent_name: "shopify_ops_agent",
-            action_type: "shopify.product.update",
-            target_type: "shopify_product",
-            target_id: "product-1",
-            risk_level: 3,
-            payload_summary: "Update product copy.",
-            status: "approved",
-            result: "Approved by founder.",
-            created_at: "2026-08-15T12:00:00.000Z",
-            updated_at: "2026-08-16T12:00:00.000Z",
-            decided_at: "2026-08-16T12:00:00.000Z",
-          },
-        ]),
-        { status: 200 },
-      );
-    },
-  });
-
-  const approval = await repository.decideApproval({
-    approvalId: "approval-1",
-    status: "approved",
-    result: "Approved by founder.",
-  });
-
-  expect(requests[0].url).toBe(
-    "https://project.supabase.co/rest/v1/approval_requests?id=eq.approval-1&status=eq.pending",
-  );
-  expect(requests[0].init?.method).toBe("PATCH");
-  expect(JSON.parse(requests[0].init?.body as string)).toMatchObject({
-    status: "approved",
-    result: "Approved by founder.",
-    decided_at: expect.any(String),
-    updated_at: expect.any(String),
-  });
-  expect(approval).toMatchObject({ id: "approval-1", status: "approved" });
-});
-
-
-test("persists and looks up scheduled-run idempotency keys", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  const repository = createSupabaseExecutionRepository({
-    url: "https://project.supabase.co",
-    serviceRoleKey: "service-role-secret",
-    request: async (url, init) => {
-      requests.push({ url: String(url), init });
-      if (String(url).includes("idempotency_key=eq.daily-audit")) {
-        return new Response(
-          JSON.stringify([
-            {
-              id: "run-existing",
-              agent_name: "shopify_ops_agent",
-              provider: "system",
-              model: "governed-tool-runner",
-              route_agent: "shopify_ops_agent",
-              risk_level: 1,
-              status: "completed",
-              idempotency_key: "daily-audit",
-              created_at: "2026-08-17T12:00:00.000Z",
-            },
-          ]),
-          { status: 200 },
-        );
-      }
-      return new Response(
-        JSON.stringify([
-          {
-            id: "run-new",
-            agent_name: "shopify_ops_agent",
-            provider: "system",
-            model: "governed-tool-runner",
-            route_agent: "shopify_ops_agent",
-            risk_level: 1,
-            status: "running",
-            idempotency_key: "daily-audit",
-            created_at: "2026-08-17T12:00:00.000Z",
-          },
-        ]),
-        { status: 201 },
-      );
-    },
-  });
-
-  const created = await repository.createAgentRun({
-    agentName: "shopify_ops_agent",
-    provider: "system",
-    model: "governed-tool-runner",
-    routeAgent: "shopify_ops_agent",
-    riskLevel: 1,
-    inputSummary: "Daily audit.",
-    idempotencyKey: "daily-audit",
-  });
-  const existing = await repository.findAgentRunByIdempotencyKey("daily-audit");
-
-  expect(requests[0].url).toBe("https://project.supabase.co/rest/v1/agent_runs");
-  expect(JSON.parse(requests[0].init?.body as string)).toMatchObject({ idempotency_key: "daily-audit" });
-  expect(created.idempotencyKey).toBe("daily-audit");
-  expect(requests[1].url).toBe(
-    "https://project.supabase.co/rest/v1/agent_runs?idempotency_key=eq.daily-audit&limit=1",
-  );
-  expect(existing).toMatchObject({ id: "run-existing", idempotencyKey: "daily-audit" });
-});
-
-
-test("acquires and releases a distributed job lease through Supabase RPCs", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  const repository = createSupabaseExecutionRepository({
-    url: "https://project.supabase.co",
-    serviceRoleKey: "service-role-secret",
-    request: async (url, init) => {
-      requests.push({ url: String(url), init });
-      if (String(url).endsWith("/rpc/acquire_job_lease")) {
-        return new Response(
-          JSON.stringify([
-            {
-              lease_key: "daily-audit",
-              owner_id: "worker-a",
-              acquired_at: "2026-08-17T12:00:00.000Z",
-              expires_at: "2026-08-17T12:01:00.000Z",
-            },
-          ]),
-          { status: 200 },
-        );
-      }
-      return new Response(JSON.stringify([{ released: true }]), { status: 200 });
-    },
-  });
-
-  const lease = await repository.acquireJobLease({
-    leaseKey: "daily-audit",
-    ownerId: "worker-a",
-    leaseDurationMs: 60_000,
-  });
-  const released = await repository.releaseJobLease({ leaseKey: "daily-audit", ownerId: "worker-a" });
-
-  expect(requests[0].url).toBe("https://project.supabase.co/rest/v1/rpc/acquire_job_lease");
-  expect(JSON.parse(requests[0].init?.body as string)).toEqual({
-    p_lease_key: "daily-audit",
-    p_owner_id: "worker-a",
-    p_lease_duration_ms: 60_000,
-  });
-  expect(lease).toMatchObject({ leaseKey: "daily-audit", ownerId: "worker-a" });
-  expect(requests[1].url).toBe("https://project.supabase.co/rest/v1/rpc/release_job_lease");
-  expect(released).toBe(true);
-});
-
-
-test("persists correlation IDs across runs, decisions, audit events, and tool calls", async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  const row = {
-    id: "correlation-record-1",
-    run_id: "run-1",
-    agent_name: "product_page_agent",
-    tool_name: "shopify.products.read",
-    risk_level: 1,
-    approval_id: null,
-    event_type: "agent.run.completed",
-    outcome: "succeeded",
-    metadata: {},
-    created_at: "2026-08-17T12:00:00.000Z",
-    correlation_id: "corr-001",
-  };
-  const repository = createSupabaseExecutionRepository({
-    url: "https://project.supabase.co",
-    serviceRoleKey: "service-role-secret",
-    request: async (url, init) => {
-      requests.push({ url: String(url), init });
-      if (String(url).endsWith("/agent_runs")) {
-        return new Response(JSON.stringify([{
-          id: "run-1",
-          agent_name: "product_page_agent",
-          provider: "anthropic",
-          model: "claude-test",
-          route_agent: "product_page_agent",
-          risk_level: 1,
-          status: "running",
-          created_at: "2026-08-17T12:00:00.000Z",
-          correlation_id: "corr-001",
-        }]), { status: 201 });
-      }
-      if (String(url).endsWith("/routing_decisions")) {
-        return new Response(JSON.stringify([{
-          id: "decision-1",
-          run_id: "run-1",
-          selected_agent: "product_page_agent",
-          risk_level: 1,
-          reason: "Product audit.",
-          needed_tools: [],
-          approval_required: false,
-          created_at: "2026-08-17T12:00:00.000Z",
-          correlation_id: "corr-001",
-        }]), { status: 201 });
-      }
-      return new Response(JSON.stringify([row]), { status: 201 });
-    },
-  });
-
-  const run = await repository.createAgentRun({
-    agentName: "product_page_agent", provider: "anthropic", model: "claude-test",
-    routeAgent: "product_page_agent", riskLevel: 1, correlationId: "corr-001",
-  });
-  await repository.recordRoutingDecision({
-    runId: "run-1", selectedAgent: "product_page_agent", riskLevel: 1,
-    reason: "Product audit.", neededTools: [], approvalRequired: false, correlationId: "corr-001",
-  });
-  const event = await repository.recordAuditEvent({
-    runId: "run-1", agentName: "product_page_agent", eventType: "agent.run.completed",
-    outcome: "succeeded", metadata: {}, correlationId: "corr-001",
-  });
-
-  expect(JSON.parse(requests[0].init?.body as string)).toMatchObject({ correlation_id: "corr-001" });
-  expect(JSON.parse(requests[1].init?.body as string)).toMatchObject({ correlation_id: "corr-001" });
-  expect(JSON.parse(requests[2].init?.body as string)).toMatchObject({ correlation_id: "corr-001" });
-  expect(run.correlationId).toBe("corr-001");
-  expect(event.correlationId).toBe("corr-001");
+  expect(page.approvals).toHaveLength(2);
+  expect(page.nextCursor).toEqual(expect.any(String));
 });

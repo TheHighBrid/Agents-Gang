@@ -1,6 +1,6 @@
 export type RiskLevel = 1 | 2 | 3 | 4;
 
-export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "consumed";
 
 export type ApprovalReference = {
   status: ApprovalStatus;
@@ -13,6 +13,12 @@ export type ApprovalGateResult =
     allowed: false;
     reason: "approval_required" | "approval_not_approved" | "approval_expired";
   };
+
+export function isApprovalExpired(expiresAt: string | undefined, now = new Date()): boolean {
+  if (!expiresAt) return false;
+  const expiresAtMs = Date.parse(expiresAt);
+  return !Number.isFinite(expiresAtMs) || expiresAtMs <= now.getTime();
+}
 
 export function evaluateApprovalGate({
   riskLevel,
@@ -39,7 +45,7 @@ export function evaluateApprovalGate({
     return { allowed: false, reason: "approval_not_approved" };
   }
 
-  if (approval.expiresAt && new Date(approval.expiresAt).getTime() <= now.getTime()) {
+  if (isApprovalExpired(approval.expiresAt, now)) {
     return { allowed: false, reason: "approval_expired" };
   }
 

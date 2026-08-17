@@ -31,6 +31,10 @@ A typical governed operation follows this sequence:
 
 The current product-page scan job invokes Shopify through this same tool contract; it no longer calls the Shopify adapter directly.
 
+## Approval desk
+
+The `/approvals` page provides a persisted approval queue backed by the execution repository. Configure the server-side `FOUNDER_AUTH_SECRET` before using the approval or observability APIs. Those APIs accept only signed founder-session credentials, resolve identity and role in server code, deny anonymous, malformed, expired, revoked, and non-founder sessions by default, and support queue loading plus explicit approve/reject decisions with a required decision note. The signing secret and revocation configuration must remain server-side and must never be exposed through client configuration, logs, or committed files.
+
 ## Execution roadmap
 
 `ANTHROPIC_MODEL` is optional and lets deployments select a different model
@@ -39,7 +43,7 @@ without a code change. The chat endpoint accepts JSON in the form
 time out after 30 seconds and return a structured JSON error if routing or the
 provider response is invalid.
 
-1. Build authenticated approval APIs and make the approvals dashboard display and decide persisted approval records.
+1. Build authenticated approval APIs and make the approvals dashboard display and decide persisted approval records. **Complete.**
 2. Route each remaining real adapter and scheduled job through the common execution contract.
 3. Add a production migration runner and deployment-level Supabase verification.
 4. Add real tool adapters and capability policies for Shopify draft updates, Gmail, Calendar, image audit, and web search.

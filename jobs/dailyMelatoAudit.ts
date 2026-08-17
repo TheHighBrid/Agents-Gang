@@ -1,34 +1,30 @@
-import type { ExecutionRepository } from "../lib/execution/repository";
+import type { ToolExecutionContext } from "../lib/execution/tool-execution";
+import type { ProductImageAuditor } from "../tools/image-audit-tool";
 import type { ShopifyProductsReader } from "../tools/shopify-products-tool";
-import { runProductPageScan } from "./productPageScan";
-import { runScheduledJob } from "./scheduledJobRunner";
+import { runGovernedJob } from "./governedJob";
+import { runProductAudit } from "./productAudit";
 
+/** Run the store-health audit inside an existing governed execution. */
 export function runDailyMelatoAudit(
-  repository: ExecutionRepository,
+  context: ToolExecutionContext,
   reader?: ShopifyProductsReader,
-  controls?: { idempotencyKey?: string; correlationId?: string },
+  auditor?: ProductImageAuditor,
 ) {
-  return runScheduledJob(repository, {
-    idempotencyKey: controls?.idempotencyKey ?? "daily-melato-audit",
-    correlationId: controls?.correlationId,
+  return runProductAudit(context, reader, auditor);
+}
+
+/** Create the durable run and route records used by the scheduled daily audit. */
+export function runDailyMelatoAuditJob(
+  repository: ToolExecutionContext["repository"],
+  reader?: ShopifyProductsReader,
+  auditor?: ProductImageAuditor,
+) {
+  return runGovernedJob({
+    repository,
     agentName: "shopify_ops_agent",
-    provider: "system",
-    model: "governed-tool-runner",
-    routeAgent: "shopify_ops_agent",
-    riskLevel: 1,
-    inputSummary: "Daily Melato store-health audit.",
-    reason: "The daily schedule requested a governed Shopify store-health audit.",
-    neededTools: ["shopify.products.read"],
-    execute: async ({ runId, correlationId }) => {
-      const result = await runProductPageScan(
-        { repository, runId, agentName: "shopify_ops_agent", correlationId },
-        reader,
-      );
-      if (!result.ok) {
-        throw new Error(result.error.message);
-      }
-      return result.data;
-    },
-    summarize: () => "Daily Melato audit completed.",
+    inputSummary: "Scheduled daily Melato store health audit",
+    reason: "Review product metadata and imagery for daily store-health issues",
+    neededTools: ["shopify.products.read", "product.image.audit"],
+    execute: (context) => runDailyMelatoAudit(context, reader, auditor),
   });
 }

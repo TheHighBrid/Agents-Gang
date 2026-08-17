@@ -29,22 +29,18 @@ export type ApprovalDecisionInput = {
   result: string;
 };
 
-export type JobLeaseRecord = {
-  leaseKey: string;
-  ownerId: string;
-  acquiredAt: string;
-  expiresAt: string;
+export type ApprovalQuery = {
+  status?: ApprovalStatus;
+  actionType?: string;
+  requestedFrom?: string;
+  requestedTo?: string;
+  cursor?: string;
+  limit?: number;
 };
 
-export type AcquireJobLeaseInput = {
-  leaseKey: string;
-  ownerId: string;
-  leaseDurationMs: number;
-};
-
-export type ReleaseJobLeaseInput = {
-  leaseKey: string;
-  ownerId: string;
+export type ApprovalPage = {
+  approvals: ApprovalRecord[];
+  nextCursor?: string;
 };
 
 export type AgentRunStatus = "running" | "completed" | "failed" | "blocked";
@@ -130,6 +126,9 @@ export type ExecutionRepository = {
   createApproval(input: CreateApprovalInput): Promise<ApprovalRecord>;
   getApproval(approvalId: string): Promise<ApprovalRecord | undefined>;
   decideApproval(input: ApprovalDecisionInput): Promise<ApprovalRecord>;
+  consumeApproval(approvalId: string): Promise<ApprovalRecord>;
+  listApprovals(): Promise<ApprovalRecord[]>;
+  queryApprovals(query: ApprovalQuery): Promise<ApprovalPage>;
   createAgentRun(input: CreateAgentRunInput): Promise<AgentRunRecord>;
   completeAgentRun(input: CompleteAgentRunInput): Promise<AgentRunRecord>;
   recordRoutingDecision(input: RecordRoutingDecisionInput): Promise<RoutingDecisionRecord>;
@@ -203,6 +202,40 @@ export function createInMemoryExecutionRepository({
       };
       approvals.set(decided.id, decided);
       return decided;
+    },
+
+    async consumeApproval(approvalId) {
+      const approval = approvals.get(approvalId);
+      if (!approval || approval.status !== "approved") throw new Error("Approval request is not executable");
+      const timestamp = clock().toISOString();
+      const consumed = { ...approval, status: "consumed" as const, updatedAt: timestamp };
+      approvals.set(approvalId, consumed);
+      return consumed;
+    },
+
+    async listApprovals() {
+      return [...approvals.values()].sort((left, right) =>
+        right.requestedAt.localeCompare(left.requestedAt),
+      );
+    },
+
+    async queryApprovals(query) {
+      const limit = Math.min(Math.max(query.limit ?? 25, 1), 100);
+      const cursor = query.cursor ? decodeApprovalCursor(query.cursor) : undefined;
+      const requestedFrom = query.requestedFrom ? new Date(query.requestedFrom).getTime() : undefined;
+      const requestedTo = query.requestedTo ? new Date(query.requestedTo).getTime() : undefined;
+      const filtered = [...approvals.values()]
+        .filter((approval) => !query.status || approval.status === query.status)
+        .filter((approval) => !query.actionType || approval.actionType === query.actionType)
+        .filter((approval) => requestedFrom === undefined || new Date(approval.requestedAt).getTime() >= requestedFrom)
+        .filter((approval) => requestedTo === undefined || new Date(approval.requestedAt).getTime() <= requestedTo)
+        .filter((approval) => !cursor || compareApprovalOrder(approval, cursor) > 0)
+        .sort(compareApprovals);
+      const page = filtered.slice(0, limit);
+      return {
+        approvals: page,
+        nextCursor: filtered.length > limit && page.length ? encodeApprovalCursor(page[page.length - 1]!) : undefined,
+      };
     },
 
     async createAgentRun(input) {
@@ -313,4 +346,31 @@ export function createInMemoryExecutionRepository({
       return newestFirst(toolCalls);
     },
   };
+}
+
+function compareApprovals(left: ApprovalRecord, right: ApprovalRecord) {
+  return right.requestedAt.localeCompare(left.requestedAt) || right.id.localeCompare(left.id);
+}
+
+type ApprovalCursor = Pick<ApprovalRecord, "requestedAt" | "id">;
+
+function compareApprovalOrder(approval: ApprovalRecord, cursor: ApprovalCursor) {
+  return cursor.requestedAt.localeCompare(approval.requestedAt) || cursor.id.localeCompare(approval.id);
+}
+
+export function encodeApprovalCursor(approval: ApprovalCursor) {
+  return Buffer.from(JSON.stringify(approval), "utf8").toString("base64url");
+}
+
+export function decodeApprovalCursor(cursor: string): ApprovalCursor {
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("Approval cursor is invalid");
+  }
+  if (!value || typeof value !== "object" || typeof (value as ApprovalCursor).requestedAt !== "string" || typeof (value as ApprovalCursor).id !== "string") {
+    throw new Error("Approval cursor is invalid");
+  }
+  return value as ApprovalCursor;
 }

@@ -1,22 +1,18 @@
-import { createExecutionRepository } from "../../../lib/execution/execution-repository-factory";
-import { summarizeOperationalHealth } from "../../../lib/observability/operational-health";
+import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../lib/approvals/auth";
+import { getDashboardSnapshotResponse } from "../../../lib/dashboard/dashboard-api";
+import { createExecutionRepository, ExecutionRepositoryConfigurationError } from "../../../lib/execution/execution-repository-factory";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
+  if (authorization) return authorization;
+
   try {
     const repository = createExecutionRepository(process.env);
-    const [runs, routingDecisions, auditEvents, toolCalls] = await Promise.all([
-      repository.listAgentRuns(),
-      repository.listRoutingDecisions(),
-      repository.listAuditEvents(),
-      repository.listToolCalls(),
-    ]);
-    const operationalHealth = summarizeOperationalHealth({ runs, auditEvents, toolCalls });
-
-    return Response.json({ runs, routingDecisions, auditEvents, operationalHealth });
+    return getDashboardSnapshotResponse(repository);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Unable to load dashboard data" },
-      { status: 500 },
-    );
+    if (error instanceof ExecutionRepositoryConfigurationError) {
+      return Response.json({ error: "Execution storage is not configured" }, { status: 503 });
+    }
+    return Response.json({ error: "Unable to load dashboard data" }, { status: 500 });
   }
 }
