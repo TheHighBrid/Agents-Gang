@@ -22,9 +22,24 @@ describe("inbox triage scheduled job", () => {
     );
 
     expect(result.data.messages).toMatchObject([{ id: "m1", priority: "high", category: "action_required" }]);
-    await expect(repository.listToolCalls()).resolves.toMatchObject([
-      { runId: "inbox-run-1", toolName: "gmail.messages.search", outcome: "succeeded" },
-    ]);
+    expect(result.data.draftApprovals).toHaveLength(1);
+    const secondRun = await runInboxTriageJob(
+      repository,
+      async () => [{
+        id: "m1",
+        threadId: "t1",
+        from: "sender@example.com",
+        to: "owner@example.com",
+        subject: "Action needed: review",
+        snippet: "Please review this today.",
+        receivedAt: "2025-10-14T10:00:00.000Z",
+        labelIds: ["INBOX", "IMPORTANT"],
+      }],
+    );
+    expect(secondRun.data.draftApprovals).toHaveLength(0);
+    const toolCalls = await repository.listToolCalls();
+    expect(toolCalls).toHaveLength(2);
+    expect(toolCalls[0]).toMatchObject({ runId: "inbox-run-1", toolName: "gmail.messages.search", outcome: "succeeded" });
     await expect(repository.listAgentRuns()).resolves.toMatchObject([
       { id: "inbox-run-1", agentName: "inbox_triage_agent", status: "completed" },
     ]);
