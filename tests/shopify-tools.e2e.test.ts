@@ -22,7 +22,9 @@ import {
 } from "../tools/shopify-customer-tools";
 
 const fetchMock = vi.hoisted(() => {
+  process.env.SHOPIFY_STORE_MODE = "test";
   process.env.SHOPIFY_STORE_DOMAIN = "integration-test.myshopify.com";
+  process.env.SHOPIFY_TEST_STORE_DOMAIN = "integration-test.myshopify.com";
   process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = "integration-test-token";
   return vi.fn();
 });
@@ -261,6 +263,42 @@ describe("Shopify tools end-to-end integration", () => {
     );
     expect(updateResult).toMatchObject({ ok: true, data: { data: { customerUpdate: { customer: { id: customerId } } } } });
     expect(lastRequest().body.query).toContain("mutation UpdateCustomer");
+  });
+
+  test("preserves normalized Shopify rate-limit classification in audit records", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("slow down", { status: 429, headers: { "Retry-After": "2" } }));
+    const repository = createInMemoryExecutionRepository();
+
+    const result = await runShopifyProductRead(
+      { repository, runId: "e2e-rate-limited", agentName: "shopify_ops_agent" },
+      { first: 2 },
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "tool_execution_failed", retriable: true } });
+    await expect(repository.listToolCalls()).resolves.toMatchObject([
+      { toolName: "shopify.products.read", outcome: "failed", errorCode: "shopify_rate_limited" },
+    ]);
+    await expect(repository.listAuditEvents()).resolves.toMatchObject([
+      { toolName: "shopify.products.read", outcome: "failed", metadata: { errorCode: "shopify_rate_limited" } },
+    ]);
+  });
+
+  test("preserves normalized Shopify timeout classification in audit records", async () => {
+    fetchMock.mockRejectedValueOnce(Object.assign(new Error("aborted"), { name: "AbortError" }));
+    const repository = createInMemoryExecutionRepository();
+
+    const result = await runShopifyProductRead(
+      { repository, runId: "e2e-timeout", agentName: "shopify_ops_agent" },
+      { first: 2 },
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: "tool_execution_failed", retriable: true } });
+    await expect(repository.listToolCalls()).resolves.toMatchObject([
+      { toolName: "shopify.products.read", outcome: "failed", errorCode: "shopify_timeout" },
+    ]);
+    await expect(repository.listAuditEvents()).resolves.toMatchObject([
+      { toolName: "shopify.products.read", outcome: "failed", metadata: { errorCode: "shopify_timeout" } },
+    ]);
   });
 
   test("blocks a high-risk Shopify mutation before making a network request", async () => {

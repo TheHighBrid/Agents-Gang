@@ -23,6 +23,19 @@ describe("approval gate", () => {
     ).toThrow("Risk level must be an integer from 1 to 4");
   });
 
+  test("fails closed when an approval expiry timestamp is malformed", () => {
+    const result = evaluateApprovalGate({
+      riskLevel: 3,
+      approval: { status: "approved", expiresAt: "not-a-date" },
+      now: new Date("2026-08-15T12:00:01.000Z"),
+    });
+
+    expect(result).toEqual({
+      allowed: false,
+      reason: "approval_expired",
+    });
+  });
+
   test("blocks an approved record after its expiry timestamp", () => {
     const result = evaluateApprovalGate({
       riskLevel: 4,

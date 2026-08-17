@@ -14,6 +14,12 @@ export type ApprovalGateResult =
     reason: "approval_required" | "approval_not_approved" | "approval_expired";
   };
 
+export function isApprovalExpired(expiresAt: string | undefined, now = new Date()): boolean {
+  if (!expiresAt) return false;
+  const expiresAtMs = Date.parse(expiresAt);
+  return !Number.isFinite(expiresAtMs) || expiresAtMs <= now.getTime();
+}
+
 export function evaluateApprovalGate({
   riskLevel,
   approval,
@@ -39,7 +45,7 @@ export function evaluateApprovalGate({
     return { allowed: false, reason: "approval_not_approved" };
   }
 
-  if (approval.expiresAt && new Date(approval.expiresAt).getTime() <= now.getTime()) {
+  if (isApprovalExpired(approval.expiresAt, now)) {
     return { allowed: false, reason: "approval_expired" };
   }
 

@@ -1,6 +1,7 @@
 import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../../lib/approvals/auth";
 import { getApprovalDetailResponse, toSafeApproval } from "../../../../lib/approvals/approval-api";
 import { createExecutionRepository, ExecutionRepositoryConfigurationError } from "../../../../lib/execution/execution-repository-factory";
+import { isApprovalExpired } from "../../../../lib/execution/approval-engine";
 import type { ExecutionRepository } from "../../../../lib/execution/repository";
 
 type RouteContext = { params: Promise<{ approvalId: string }> };
@@ -53,7 +54,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       await audit(repository, approvalId, identity.ok ? identity.identity.subject : "unknown", body.status, "failed", "not_found");
       return Response.json({ error: "Approval request was not found" }, { status: 404 });
     }
-    if (existing.status !== "pending" || (existing.expiresAt && new Date(existing.expiresAt) <= new Date())) {
+    if (existing.status !== "pending" || isApprovalExpired(existing.expiresAt)) {
       await audit(repository, approvalId, identity.ok ? identity.identity.subject : "unknown", body.status, "blocked", "not_pending");
       return Response.json({ error: "Approval request is no longer pending" }, { status: 409 });
     }

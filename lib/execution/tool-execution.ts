@@ -1,4 +1,5 @@
 import { evaluateApprovalGate, type RiskLevel } from "./approval-engine";
+import { assertToolPolicy } from "./policy-registry";
 import type { ExecutionRepository } from "./repository";
 import { assertToolPolicy } from "./tool-policy";
 
@@ -38,6 +39,33 @@ export type ToolSuccess<Output> = {
   ok: true;
   data: Output;
 };
+
+const SAFE_ADAPTER_ERROR_CODES = new Set([
+  "shopify_auth_failed",
+  "shopify_rate_limited",
+  "shopify_timeout",
+  "shopify_upstream_failed",
+  "shopify_transport_failed",
+  "shopify_graphql_failed",
+  "shopify_user_error",
+  "shopify_malformed_response",
+  "gmail_auth_failed",
+  "gmail_rate_limited",
+  "gmail_upstream_failed",
+  "gmail_transport_failed",
+  "gmail_timeout",
+  "gmail_malformed_response",
+]);
+
+function normalizeExecutionFailure(error: unknown) {
+  if (error && typeof error === "object") {
+    const candidate = error as { code?: unknown; retriable?: unknown };
+    if (typeof candidate.code === "string" && SAFE_ADAPTER_ERROR_CODES.has(candidate.code)) {
+      return { errorCode: candidate.code, retriable: candidate.retriable === true };
+    }
+  }
+  return { errorCode: "tool_execution_failed", retriable: true };
+}
 
 export function defineTool<Input, Output>(definition: ToolDefinition<Input, Output>) {
   assertToolPolicy(definition);
@@ -160,6 +188,7 @@ export async function executeTool<Input, Output>(
     });
     return { ok: true, data };
   } catch (error) {
+    const failure = normalizeExecutionFailure(error);
     const message = error instanceof Error ? error.message : "Tool execution failed.";
     await context.repository.recordToolCall({
       runId: context.runId,
@@ -169,7 +198,7 @@ export async function executeTool<Input, Output>(
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
       outcome: "failed",
-      errorCode: "tool_execution_failed",
+      errorCode: failure.errorCode,
     });
     await context.repository.recordAuditEvent({
       runId: context.runId,
@@ -179,11 +208,11 @@ export async function executeTool<Input, Output>(
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "failed",
-      metadata: { errorCode: "tool_execution_failed" },
+      metadata: { errorCode: failure.errorCode },
     });
     return {
       ok: false,
-      error: { code: "tool_execution_failed", message, retriable: true },
+      error: { code: "tool_execution_failed", message, retriable: failure.retriable },
     };
   }
 }
