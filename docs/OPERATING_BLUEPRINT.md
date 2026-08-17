@@ -147,6 +147,8 @@ Every pull request must include a completed version of this table. Missing evide
 | External effects | Test/sandbox proof, rate-limit behavior, idempotency, and failure handling. |
 | UX impact | Screenshot or walkthrough plus accessibility/empty/error state coverage, when user-facing. |
 
+The canonical evidence index, status vocabulary, and reusable acceptance templates live in the [Release Evidence Register](./RELEASE_EVIDENCE_REGISTER.md). Material governance, exception, dependency, and release decisions live in the [Decision Log](./DECISION_LOG.md).
+
 ## 8. Project Governance
 
 | Decision type | Decision owner | Required reviewers |
@@ -160,7 +162,7 @@ Every pull request must include a completed version of this table. Missing evide
 
 ## 9. Release Checklist
 
-Before C5-06 may start, all answers below must be `Yes` with linked evidence.
+Before C5-06 may start, all answers below must be `Yes` with linked evidence. Record the evidence in `RC-01` through `RC-10` in the [Release Evidence Register](./RELEASE_EVIDENCE_REGISTER.md); a planned row is not a passing gate.
 
 1. Are all enabled external mutation tools registered in the capability policy and approval-gated where required?
 2. Are approval list/detail/decision endpoints authenticated, authorized, audited, rate-limited, and covered by abuse tests?
@@ -175,6 +177,6 @@ Before C5-06 may start, all answers below must be `Yes` with linked evidence.
 
 ## 10. Source of Truth and Update Cadence
 
-This document is the architectural roadmap. GitHub milestones and issues are the work queue. `docs/AGENT_WORK_ORDERS.md` is the detailed execution instruction. `docs/DELIVERY_CALENDAR.md` is the target schedule. If they conflict, update the blueprint and the affected issue in the same pull request, explaining the decision in the repository decision log.
+This document is the architectural roadmap. GitHub milestones and issues are the work queue. `docs/AGENT_WORK_ORDERS.md` is the detailed execution instruction. `docs/DELIVERY_CALENDAR.md` is the target schedule. `docs/RELEASE_EVIDENCE_REGISTER.md` is the evidence index and `docs/DECISION_LOG.md` is the durable record of material decisions. If they conflict, update the blueprint and the affected issue in the same pull request, explaining the decision in the repository decision log.
 
 The owner of each active issue posts a concise update every working day: **status, evidence, blockers, next action, and changed target date**. The three agents hold an integration checkpoint at the end of each chapter; no chapter is considered complete merely because its issues are closed.
