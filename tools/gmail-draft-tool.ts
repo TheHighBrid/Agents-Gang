@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createApprovalRequest } from "./approvals";
 import { defineTool, executeTool, type ToolExecutionContext } from "../lib/execution/tool-execution";
 import type { ExecutionRepository } from "../lib/execution/repository";
-import { GmailRequestError } from "./gmail";
+import { GmailRequestError, fetchGmail, gmailResponseError, readGmailJson, type GmailFetcher } from "./gmail";
 
 export type GmailDraftInput = {
   messageId: string;
@@ -19,11 +19,10 @@ export type GmailDraftResult = {
 };
 
 export type GmailDraftWriter = (input: GmailDraftInput) => Promise<GmailDraftResult>;
-type GmailFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-
 export type GmailDraftOptions = {
   accessToken?: string;
   fetcher?: GmailFetcher;
+  timeoutMs?: number;
 };
 
 function parseDraftInput(input: unknown): GmailDraftInput {
@@ -64,18 +63,16 @@ export async function createGmailDraft(
     parsed.body,
   ].join("\\r\\n");
   const raw = Buffer.from(rawMessage, "utf8").toString("base64url");
-  const response = await fetcher("https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
+  const response = await fetchGmail(fetcher, "https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ message: { threadId: parsed.threadId, raw } }),
-  });
-  if (!response.ok) {
-    throw new GmailRequestError(`Gmail draft API returned ${response.status}`, response.status >= 500 ? 502 : response.status);
-  }
-  const result = await response.json() as { id?: string; message?: { id?: string; threadId?: string } };
+  }, options.timeoutMs);
+  if (!response.ok) throw gmailResponseError(response);
+  const result = await readGmailJson<{ id?: string; message?: { id?: string; threadId?: string } }>(response);
   if (!result.id || !result.message?.id) throw new GmailRequestError("Gmail draft API returned an incomplete draft");
   return {
     id: result.id,
@@ -114,6 +111,6 @@ export async function createGmailDraftApproval(
     actionType: "gmail.draft.create",
     target: { type: "gmail_draft", id: gmailDraftPayloadDigest(parsed) },
     riskLevel: 3,
-    payloadSummary: `Create Gmail draft to ${parsed.to}; subject: ${parsed.subject}; body: ${parsed.body}`,
+    payloadSummary: `Create Gmail draft to ${parsed.to}; subject: ${parsed.subject}; body length: ${parsed.body.length}.`,
   });
 }

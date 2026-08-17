@@ -48,6 +48,12 @@ const SAFE_ADAPTER_ERROR_CODES = new Set([
   "shopify_graphql_failed",
   "shopify_user_error",
   "shopify_malformed_response",
+  "gmail_auth_failed",
+  "gmail_rate_limited",
+  "gmail_upstream_failed",
+  "gmail_transport_failed",
+  "gmail_timeout",
+  "gmail_malformed_response",
 ]);
 
 function normalizeExecutionFailure(error: unknown) {
