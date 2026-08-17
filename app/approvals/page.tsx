@@ -111,10 +111,10 @@ export default function ApprovalsPage() {
         <div>
           <p className="section-kicker">Founder access</p>
           <h2 id="access-heading">Open the governed queue</h2>
-          <p className="muted">The token is used only for this browser session and is never sent anywhere except the approval API.</p>
+          <p className="muted">A signed founder session is used only for this browser session and is never sent anywhere except the protected approval API.</p>
         </div>
         <form className="access-form" onSubmit={loadApprovals}>
-          <label htmlFor="approval-token">Approval API token</label>
+          <label htmlFor="approval-token">Founder session token</label>
           <div className="access-row">
             <input
               id="approval-token"

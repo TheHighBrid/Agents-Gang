@@ -1,20 +1,9 @@
 import { createExecutionRepository, ExecutionRepositoryConfigurationError } from "../../../lib/execution/execution-repository-factory";
-import { isApprovalApiAuthorized } from "../../../lib/approvals/auth";
-
-function unauthorizedResponse() {
-  return Response.json(
-    { error: "Approval API authentication required" },
-    {
-      status: 401,
-      headers: { "WWW-Authenticate": "Bearer" },
-    },
-  );
-}
+import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../lib/approvals/auth";
 
 export async function GET(request: Request) {
-  if (!isApprovalApiAuthorized(request, process.env.APPROVALS_API_TOKEN)) {
-    return unauthorizedResponse();
-  }
+  const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
+  if (authorization) return authorization;
 
   try {
     const repository = createExecutionRepository(process.env);
