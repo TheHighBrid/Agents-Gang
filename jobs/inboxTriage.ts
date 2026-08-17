@@ -2,7 +2,8 @@ import type { ToolExecutionContext } from "../lib/execution/tool-execution";
 import { runGovernedJob } from "./governedJob";
 import { runGmailSearch, type GmailSearchReader } from "../tools/gmail-tool";
 import type { GmailMessageSummary } from "../tools/gmail";
-import { notifyHighPriorityMessages, runInboxAlert, type InboxAlertNotifier } from "../tools/inbox-alert";
+import { notifyHighPriorityMessages, postInboxAlert, type InboxAlertNotifier } from "../tools/inbox-alert";
+import { createGmailDraftApproval, gmailDraftPayloadDigest, type GmailDraftInput } from "../tools/gmail-draft-tool";
 
 type TriagePriority = "high" | "normal" | "low";
 type TriageCategory = "action_required" | "notification" | "general";
@@ -11,6 +12,39 @@ export type TriagedMessage = GmailMessageSummary & {
   priority: TriagePriority;
   category: TriageCategory;
 };
+
+export type DraftApprovalSummary = {
+  approvalId: string;
+  messageId: string;
+  targetDigest: string;
+};
+
+const DEFAULT_DRAFT_BODY = "Thanks for your message. I have received it and will review it shortly.";
+
+export async function prepareHighPriorityDraftApprovals(
+  repository: ToolExecutionContext["repository"],
+  messages: TriagedMessage[],
+  bodyFactory: (message: TriagedMessage) => string = () => DEFAULT_DRAFT_BODY,
+): Promise<DraftApprovalSummary[]> {
+  const existing = await repository.queryApprovals({ actionType: "gmail.draft.create", limit: 100 });
+  const existingTargets = new Set(existing.approvals.map((approval) => approval.target.id));
+  const summaries: DraftApprovalSummary[] = [];
+  for (const message of messages.filter((item) => item.priority === "high" && item.from)) {
+    const draft: GmailDraftInput = {
+      messageId: message.id,
+      threadId: message.threadId,
+      to: message.from as string,
+      subject: message.subject ? (message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`) : "Re: your message",
+      body: bodyFactory(message),
+    };
+    const targetDigest = gmailDraftPayloadDigest(draft);
+    if (existingTargets.has(targetDigest)) continue;
+    const approval = await createGmailDraftApproval(repository, draft, "inbox_triage_agent");
+    existingTargets.add(targetDigest);
+    summaries.push({ approvalId: approval.id, messageId: message.id, targetDigest });
+  }
+  return summaries;
+}
 
 function triageMessage(message: GmailMessageSummary): TriagedMessage {
   const searchableText = `${message.subject ?? ""} ${message.snippet}`.toLowerCase();
@@ -59,6 +93,7 @@ export function runInboxTriageJob(
           if (!result.ok) throw new Error(result.error.message);
         };
       const alertDelivery = await notifyHighPriorityMessages(report.messages, configuredNotifier);
+      const draftApprovals = await prepareHighPriorityDraftApprovals(repository, report.messages);
       await repository.recordAuditEvent({
         runId: context.runId,
         agentName: "inbox_triage_agent",
@@ -71,7 +106,7 @@ export function runInboxTriageJob(
           deliveryConfigured: Boolean(configuredNotifier),
         },
       });
-      return { ...report, alertDelivery };
+      return { ...report, alertDelivery, draftApprovals };
     },
   });
 }

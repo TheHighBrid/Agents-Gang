@@ -1,9 +1,11 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { approvalConfirmationText, requiresExplicitApprovalConfirmation } from "../../lib/approvals/decision";
 
-type ApprovalStatus = "pending" | "approved" | "rejected";
+type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "consumed";
+type ApprovalFilter = ApprovalStatus | "all";
+type DecisionStatus = Extract<ApprovalStatus, "approved" | "rejected">;
 
 type Approval = {
   id: string;
@@ -11,63 +13,131 @@ type Approval = {
   actionType: string;
   target: { type: string; id: string };
   riskLevel: number;
-  payloadSummary: string;
+  summary: string;
   status: ApprovalStatus;
   requestedAt: string;
   updatedAt: string;
   decidedAt?: string;
+  expiresAt?: string;
   result?: string;
 };
 
-const statusLabels: Record<ApprovalStatus | "all", string> = {
+type ApprovalListResponse = {
+  approvals?: Approval[];
+  nextCursor?: string | null;
+  error?: string;
+};
+
+type ApprovalDetailResponse = {
+  approval?: Approval;
+  error?: string;
+};
+
+const statusLabels: Record<ApprovalFilter, string> = {
   all: "All requests",
   pending: "Needs review",
   approved: "Approved",
   rejected: "Rejected",
+  expired: "Expired",
+  consumed: "Consumed",
 };
+
+const filters: ApprovalFilter[] = ["pending", "approved", "rejected", "expired", "consumed", "all"];
 
 export default function ApprovalsPage() {
   const [token, setToken] = useState("");
   const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [filter, setFilter] = useState<ApprovalStatus | "all">("pending");
-  const [message, setMessage] = useState("Enter the approval API token to load the queue.");
+  const [filter, setFilter] = useState<ApprovalFilter>("pending");
+  const [message, setMessage] = useState("Enter a signed founder session to load persisted approval state.");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
 
-  const visibleApprovals = useMemo(
-    () => filter === "all" ? approvals : approvals.filter((approval) => approval.status === filter),
-    [approvals, filter],
-  );
-
-  async function loadApprovals(event?: FormEvent) {
+  async function loadApprovals(
+    event?: FormEvent,
+    requestedFilter: ApprovalFilter = filter,
+    cursor?: string,
+    append = false,
+  ) {
     event?.preventDefault();
-    if (!token.trim()) {
-      setMessage("A founder approval token is required.");
+    const session = token.trim();
+    if (!session) {
+      setError("A signed founder session is required.");
+      setMessage("The queue was not loaded.");
       return;
     }
+
     setLoading(true);
-    setMessage("Loading approval queue…");
+    setError(null);
+    setMessage(append ? "Loading more approval requests..." : `Loading ${statusLabels[requestedFilter].toLowerCase()}...`);
+
     try {
-      const response = await fetch("/api/approvals", {
-        headers: { Authorization: `Bearer ${token.trim()}` },
+      const response = await fetch(buildApprovalListPath(requestedFilter, cursor), {
+        method: "GET",
+        headers: { Authorization: `Bearer ${session}` },
         cache: "no-store",
       });
-      const body = await response.json() as { approvals?: Approval[]; error?: string };
+      const body = await response.json() as ApprovalListResponse;
       if (!response.ok) throw new Error(body.error ?? "Unable to load approvals");
-      setApprovals(body.approvals ?? []);
-      setMessage(`${body.approvals?.length ?? 0} approval requests loaded.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to load approvals");
+
+      const incoming = body.approvals ?? [];
+      setApprovals((current) => append ? [...current, ...incoming] : incoming);
+      setNextCursor(body.nextCursor ?? null);
+      if (!append) setSelectedApproval(null);
+      setMessage(`${incoming.length} ${statusLabels[requestedFilter].toLowerCase()} loaded${body.nextCursor ? ". More are available." : "."}`);
+    } catch (loadError) {
+      const text = loadError instanceof Error ? loadError.message : "Unable to load approvals";
+      setError(text);
+      setMessage("Approval data could not be loaded.");
+      if (!append) setApprovals([]);
     } finally {
       setLoading(false);
     }
   }
 
-  async function decide(approvalId: string, status: Extract<ApprovalStatus, "approved" | "rejected">, result: string) {
-    if (!result.trim()) {
-      setMessage("Add a short decision note before submitting.");
+  async function changeFilter(status: ApprovalFilter) {
+    setFilter(status);
+    setNextCursor(null);
+    if (token.trim()) await loadApprovals(undefined, status);
+  }
+
+  async function loadDetail(approvalId: string) {
+    const session = token.trim();
+    if (!session) {
+      setError("A signed founder session is required.");
       return;
     }
+
+    setDetailLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${session}` },
+        cache: "no-store",
+      });
+      const body = await response.json() as ApprovalDetailResponse;
+      if (!response.ok || !body.approval) throw new Error(body.error ?? "Unable to load approval detail");
+      setSelectedApproval(body.approval);
+      requestAnimationFrame(() => detailHeadingRef.current?.focus());
+    } catch (detailError) {
+      setError(detailError instanceof Error ? detailError.message : "Unable to load approval detail");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  async function decide(approvalId: string, status: DecisionStatus, result: string) {
+    if (!result.trim()) {
+      setError("Add a short decision note before submitting.");
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
         method: "PATCH",
@@ -77,20 +147,20 @@ export default function ApprovalsPage() {
         },
         body: JSON.stringify({ status, result }),
       });
-      const body = await response.json() as { approval?: Approval; error?: string };
+      const body = await response.json() as ApprovalDetailResponse;
       if (response.status === 409) {
-        setMessage("No action was taken because this request changed. Refreshing the queue…");
-        await loadApprovals();
-        setMessage("No action was taken. The queue has been refreshed with the latest state.");
+        setMessage("No action was taken because this request changed. Refreshing the persisted queue...");
+        await loadApprovals(undefined, filter);
+        setMessage("No action was taken. The queue now reflects the latest persisted state.");
         return;
       }
-      if (!response.ok) throw new Error(body.error ?? "Unable to save decision");
-      if (body.approval) {
-        setApprovals((current) => current.map((item) => item.id === body.approval?.id ? body.approval : item));
-      }
+      if (!response.ok || !body.approval) throw new Error(body.error ?? "Unable to save decision");
+
+      setApprovals((current) => current.map((item) => item.id === body.approval?.id ? body.approval : item));
+      setSelectedApproval(body.approval);
       setMessage(`Request ${status}.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save decision");
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : "Unable to save decision");
     } finally {
       setLoading(false);
     }
@@ -102,7 +172,7 @@ export default function ApprovalsPage() {
         <div>
           <p className="eyebrow">Melato OS / Governance</p>
           <h1>Approval queue</h1>
-          <p className="lede">Review prepared actions before they reach Shopify, inboxes, calendars, or customer-facing surfaces.</p>
+          <p className="lede">Review persisted, protected approval state before governed actions reach external systems.</p>
         </div>
         <div className="header-mark" aria-hidden="true">MG</div>
       </header>
@@ -111,9 +181,9 @@ export default function ApprovalsPage() {
         <div>
           <p className="section-kicker">Founder access</p>
           <h2 id="access-heading">Open the governed queue</h2>
-          <p className="muted">A signed founder session is used only for this browser session and is never sent anywhere except the protected approval API.</p>
+          <p className="muted">The signed founder session stays in memory for this browser view and is sent only to protected approval endpoints.</p>
         </div>
-        <form className="access-form" onSubmit={loadApprovals}>
+        <form className="access-form" onSubmit={(event) => void loadApprovals(event, filter)}>
           <label htmlFor="approval-token">Founder session token</label>
           <div className="access-row">
             <input
@@ -121,28 +191,29 @@ export default function ApprovalsPage() {
               type="password"
               value={token}
               onChange={(event) => setToken(event.target.value)}
-              placeholder="Paste token"
+              placeholder="Paste signed session"
               autoComplete="off"
+              spellCheck={false}
             />
-            <button type="submit" disabled={loading}>{loading ? "Loading…" : "Load queue"}</button>
+            <button type="submit" disabled={loading}>{loading ? "Loading..." : "Load queue"}</button>
           </div>
         </form>
       </section>
 
-      <section className="queue-toolbar" aria-label="Approval filters">
+      <section className="queue-toolbar" aria-labelledby="queue-heading">
         <div>
           <p className="section-kicker">Decision desk</p>
-          <h2>Requests requiring judgment</h2>
+          <h2 id="queue-heading">Persisted approval state</h2>
         </div>
-        <div className="filter-row" role="tablist" aria-label="Filter approvals">
-          {(Object.keys(statusLabels) as Array<ApprovalStatus | "all">).map((status) => (
+        <div className="filter-row" aria-label="Filter approvals by lifecycle status">
+          {filters.map((status) => (
             <button
               key={status}
               type="button"
               className={filter === status ? "filter active" : "filter"}
-              onClick={() => setFilter(status)}
-              role="tab"
-              aria-selected={filter === status}
+              onClick={() => void changeFilter(status)}
+              aria-pressed={filter === status}
+              disabled={loading}
             >
               {statusLabels[status]}
             </button>
@@ -150,19 +221,63 @@ export default function ApprovalsPage() {
         </div>
       </section>
 
-      <p className="queue-message" role="status">{message}</p>
+      <p className="queue-message" role="status" aria-live="polite">{message}</p>
+      {error && <p className="queue-error" role="alert">{error}</p>}
 
-      <section className="approval-grid" aria-live="polite">
-        {visibleApprovals.length === 0 ? (
-          <div className="empty-state">
-            <span className="empty-icon" aria-hidden="true">✓</span>
-            <h3>{filter === "pending" ? "The queue is clear" : "No matching requests"}</h3>
-            <p>Prepared actions will appear here with their target, risk level, and decision history.</p>
-          </div>
-        ) : visibleApprovals.map((approval) => (
-          <ApprovalCard key={approval.id} approval={approval} loading={loading} onDecide={decide} />
-        ))}
-      </section>
+      <div className="approval-layout">
+        <section className="approval-list-column" aria-labelledby="queue-heading" aria-busy={loading}>
+          {loading && approvals.length === 0 ? (
+            <div className="loading-state" role="status">
+              <span className="loading-pulse" aria-hidden="true" />
+              <p>Loading persisted approval records...</p>
+            </div>
+          ) : approvals.length === 0 ? (
+            <div className="empty-state">
+              <span className="empty-icon" aria-hidden="true">✓</span>
+              <h3>{filter === "pending" ? "The queue is clear" : "No approval requests match this view"}</h3>
+              <p>Change the lifecycle filter or refresh after new governed actions are prepared.</p>
+            </div>
+          ) : (
+            <div className="approval-grid">
+              {approvals.map((approval) => (
+                <ApprovalCard
+                  key={approval.id}
+                  approval={approval}
+                  loading={loading}
+                  selected={selectedApproval?.id === approval.id}
+                  onView={loadDetail}
+                  onDecide={decide}
+                />
+              ))}
+            </div>
+          )}
+
+          {nextCursor && (
+            <button
+              type="button"
+              className="load-more"
+              onClick={() => void loadApprovals(undefined, filter, nextCursor, true)}
+              disabled={loading}
+            >
+              {loading ? "Loading..." : "Load more"}
+            </button>
+          )}
+        </section>
+
+        <aside className="approval-detail" aria-label="Approval detail" aria-busy={detailLoading}>
+          {detailLoading ? (
+            <div className="detail-placeholder" role="status">Loading approval detail...</div>
+          ) : selectedApproval ? (
+            <ApprovalDetail approval={selectedApproval} headingRef={detailHeadingRef} onClose={() => setSelectedApproval(null)} />
+          ) : (
+            <div className="detail-placeholder">
+              <p className="section-kicker">Request detail</p>
+              <h2>Select a request</h2>
+              <p>Open a persisted approval to inspect its safe summary, target, lifecycle timestamps, and decision result.</p>
+            </div>
+          )}
+        </aside>
+      </div>
     </main>
   );
 }
@@ -170,17 +285,21 @@ export default function ApprovalsPage() {
 function ApprovalCard({
   approval,
   loading,
+  selected,
+  onView,
   onDecide,
 }: {
   approval: Approval;
   loading: boolean;
-  onDecide: (id: string, status: Extract<ApprovalStatus, "approved" | "rejected">, result: string) => Promise<void>;
+  selected: boolean;
+  onView: (id: string) => Promise<void>;
+  onDecide: (id: string, status: DecisionStatus, result: string) => Promise<void>;
 }) {
   const [note, setNote] = useState("");
-  const [confirming, setConfirming] = useState<Extract<ApprovalStatus, "approved" | "rejected"> | null>(null);
+  const [confirming, setConfirming] = useState<DecisionStatus | null>(null);
   const isPending = approval.status === "pending";
 
-  function requestDecision(status: Extract<ApprovalStatus, "approved" | "rejected">) {
+  function requestDecision(status: DecisionStatus) {
     if (requiresExplicitApprovalConfirmation(approval.riskLevel)) {
       setConfirming(status);
       return;
@@ -189,18 +308,28 @@ function ApprovalCard({
   }
 
   return (
-    <article className={`approval-card ${isPending ? "pending" : "resolved"}`}>
+    <article className={`approval-card ${isPending ? "pending" : "resolved"}${selected ? " selected" : ""}`}>
       <div className="card-topline">
-        <span className={`status-badge ${approval.status}`}>{approval.status}</span>
+        <span className={`status-badge ${approval.status}`}>{statusLabels[approval.status]}</span>
         <span className="risk-badge">Risk {approval.riskLevel}</span>
       </div>
       <h3>{formatAction(approval.actionType)}</h3>
-      <p className="payload">{approval.payloadSummary}</p>
+      <p className="payload">{approval.summary}</p>
       <dl className="approval-meta">
         <div><dt>Requested by</dt><dd>{approval.requestingAgent}</dd></div>
         <div><dt>Target</dt><dd>{approval.target.type} / {approval.target.id}</dd></div>
-        <div><dt>Requested</dt><dd>{formatDate(approval.requestedAt)}</dd></div>
+        <div><dt>Requested</dt><dd><time dateTime={approval.requestedAt}>{formatDate(approval.requestedAt)}</time></dd></div>
       </dl>
+      <button
+        type="button"
+        className="view-detail"
+        onClick={() => void onView(approval.id)}
+        aria-expanded={selected}
+        aria-controls="approval-detail-panel"
+      >
+        {selected ? "Detail open" : "View persisted detail"}
+      </button>
+
       {approval.result && <p className="decision-note"><strong>Decision note:</strong> {approval.result}</p>}
       {isPending && (
         <div className="decision-panel">
@@ -217,9 +346,9 @@ function ApprovalCard({
             <button type="button" className="approve" disabled={loading} onClick={() => requestDecision("approved")}>Approve action</button>
           </div>
           {confirming && (
-            <div className="confirmation-panel" role="alertdialog" aria-labelledby={`confirm-${approval.id}`}>
+            <div className="confirmation-panel" role="alertdialog" aria-modal="true" aria-labelledby={`confirm-${approval.id}`}>
               <p className="confirmation-title" id={`confirm-${approval.id}`}>{approvalConfirmationText(approval)}</p>
-              <p className="confirmation-copy">This is a risk {approval.riskLevel} action. Confirm that you want to {confirming} it after reviewing the action and target above.</p>
+              <p className="confirmation-copy">Risk {approval.riskLevel} requires explicit confirmation. Recheck the action and target before continuing.</p>
               <div className="decision-actions">
                 <button type="button" className="reject" disabled={loading} onClick={() => setConfirming(null)}>Cancel</button>
                 <button type="button" className="approve" disabled={loading} onClick={() => { setConfirming(null); void onDecide(approval.id, confirming, note); }}>Confirm {confirming}</button>
@@ -232,10 +361,59 @@ function ApprovalCard({
   );
 }
 
+function ApprovalDetail({
+  approval,
+  headingRef,
+  onClose,
+}: {
+  approval: Approval;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  onClose: () => void;
+}) {
+  return (
+    <div id="approval-detail-panel">
+      <div className="detail-topline">
+        <div>
+          <p className="section-kicker">Persisted request</p>
+          <span className={`status-badge ${approval.status}`}>{statusLabels[approval.status]}</span>
+        </div>
+        <button type="button" className="detail-close" onClick={onClose} aria-label="Close approval detail">Close</button>
+      </div>
+      <h2 ref={headingRef} tabIndex={-1}>{formatAction(approval.actionType)}</h2>
+      <p className="detail-summary">{approval.summary}</p>
+      <dl className="detail-meta">
+        <DetailRow label="Request ID" value={approval.id} />
+        <DetailRow label="Requester" value={approval.requestingAgent} />
+        <DetailRow label="Target" value={`${approval.target.type} / ${approval.target.id}`} />
+        <DetailRow label="Risk" value={`Risk ${approval.riskLevel}`} />
+        <DetailRow label="Requested" value={formatDate(approval.requestedAt)} />
+        <DetailRow label="Updated" value={formatDate(approval.updatedAt)} />
+        {approval.expiresAt && <DetailRow label="Expires" value={formatDate(approval.expiresAt)} />}
+        {approval.decidedAt && <DetailRow label="Decided" value={formatDate(approval.decidedAt)} />}
+        {approval.result && <DetailRow label="Decision result" value={approval.result} />}
+      </dl>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+}
+
+function buildApprovalListPath(filter: ApprovalFilter, cursor?: string) {
+  const parameters = new URLSearchParams();
+  parameters.set("limit", "25");
+  if (filter !== "all") parameters.set("status", filter);
+  if (cursor) parameters.set("cursor", cursor);
+  return `/api/approvals?${parameters.toString()}`;
+}
+
 function formatAction(action: string) {
   return action.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Unknown";
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }

@@ -108,3 +108,47 @@ test("persists an agent run using the declared execution schema", async () => {
   });
   expect(run).toMatchObject({ id: "run-1", status: "running" });
 });
+
+test("queries approvals with bounded filters and returns a continuation cursor", async () => {
+  const requests: string[] = [];
+  const rows = [1, 2, 3].map((index) => ({
+    id: `approval-${index}`,
+    agent_name: "agent",
+    action_type: "publish",
+    target_type: "product",
+    target_id: `product-${index}`,
+    risk_level: 3,
+    payload_summary: `summary-${index}`,
+    status: "pending",
+    created_at: `2026-08-17T10:0${3 - index}:00.000Z`,
+    updated_at: `2026-08-17T10:0${3 - index}:00.000Z`,
+  }));
+  const repository = createSupabaseExecutionRepository({
+    url: "https://project.supabase.co",
+    serviceRoleKey: "service-role-secret",
+    request: async (url) => {
+      requests.push(String(url));
+      return new Response(JSON.stringify(rows), { status: 200 });
+    },
+  });
+
+  const page = await repository.queryApprovals({
+    status: "pending",
+    actionType: "publish",
+    requestedFrom: "2026-08-17T10:00:00.000Z",
+    requestedTo: "2026-08-17T10:05:00.000Z",
+    limit: 2,
+  });
+
+  const query = new URL(requests[0]).searchParams;
+  expect(query.get("limit")).toBe("3");
+  expect(query.get("order")).toBe("created_at.desc,id.desc");
+  expect(query.get("status")).toBe("eq.pending");
+  expect(query.get("action_type")).toBe("eq.publish");
+  expect(query.getAll("created_at")).toEqual([
+    "gte.2026-08-17T10:00:00.000Z",
+    "lte.2026-08-17T10:05:00.000Z",
+  ]);
+  expect(page.approvals).toHaveLength(2);
+  expect(page.nextCursor).toEqual(expect.any(String));
+});

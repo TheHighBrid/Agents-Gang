@@ -39,3 +39,42 @@ describe("approval list response", () => {
     });
   });
 });
+
+test("returns a bounded safe page and opaque continuation cursor", async () => {
+  const repository = createInMemoryExecutionRepository({
+    clock: () => new Date("2026-08-17T10:00:00.000Z"),
+    idFactory: (() => { let id = 0; return () => `approval-${++id}`; })(),
+  });
+  await repository.createApproval({
+    requestingAgent: "agent",
+    actionType: "publish",
+    target: { type: "product", id: "one" },
+    riskLevel: 3,
+    payloadSummary: "private payload one",
+  });
+  await repository.createApproval({
+    requestingAgent: "agent",
+    actionType: "publish",
+    target: { type: "product", id: "two" },
+    riskLevel: 3,
+    payloadSummary: "private payload two",
+  });
+
+  const response = await getApprovalListResponse(repository, "https://example.test/api/approvals?limit=1");
+  const body = await response.json() as { approvals: Array<Record<string, unknown>>; nextCursor: string | null };
+
+  expect(response.status).toBe(200);
+  expect(body.approvals).toHaveLength(1);
+  expect(body.approvals[0]).not.toHaveProperty("payloadSummary");
+  expect(body.approvals[0]).toHaveProperty("summary");
+  expect(body.nextCursor).toEqual(expect.any(String));
+});
+
+test("returns a safe client error for invalid pagination instead of throwing", async () => {
+  const repository = createInMemoryExecutionRepository();
+
+  const response = await getApprovalListResponse(repository, "https://example.test/api/approvals?limit=0");
+
+  expect(response.status).toBe(400);
+  await expect(response.json()).resolves.toEqual({ error: "Limit must be an integer from 1 to 100" });
+});
