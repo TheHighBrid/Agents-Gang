@@ -2,13 +2,15 @@
 
 This is the human-readable mirror of the GitHub issue backlog. **GitHub issues are the live execution source of truth.** Update this table in the same pull request whenever a task ID changes, a dependency changes, or a milestone is re-planned.
 
+Release proof and material implementation decisions are indexed in the [Release Evidence Register](./RELEASE_EVIDENCE_REGISTER.md) and [Decision Log](./DECISION_LOG.md).
+
 **Status key:** `Backlog` → `Claimed` → `In progress` → `Review` → `Accepted` → `Released`. `Blocked` requires an issue comment naming the blocker and requested decision.
 
 | Task ID | GitHub issue | Priority | Milestone | Direct owner | Depends on | Status | Required acceptance evidence |
 |---|---:|---|---|---|---|---|---|
 | C0-01 | [#10](https://github.com/TheHighBrid/Agents-Gang/issues/10) | P0 | Chapter 0 — Program Control | Codex | — | Backlog | Full CI quality gate green on push and pull request. |
 | C0-02 | [#11](https://github.com/TheHighBrid/Agents-Gang/issues/11) | P0 | Chapter 0 — Program Control | Manus Agent | — | Backlog | Labels, milestones, issue workflow, and planning references published. |
-| C0-03 | [#12](https://github.com/TheHighBrid/Agents-Gang/issues/12) | P1 | Chapter 0 — Program Control | SOL 5.6 | C0-02 | Backlog | Release evidence register and decision-log convention documented. |
+| C0-03 | [#12](https://github.com/TheHighBrid/Agents-Gang/issues/12) | P1 | Chapter 0 — Program Control | SOL 5.6 | C0-02 | In progress | Release evidence register and decision-log convention documented. |
 | C1-01 | [#13](https://github.com/TheHighBrid/Agents-Gang/issues/13) | P0 | Chapter 1 — Approval Control Plane | Codex | C0-01 | Backlog | Anonymous/non-founder/founder authorization test matrix passes. |
 | C1-02 | [#14](https://github.com/TheHighBrid/Agents-Gang/issues/14) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01 | Backlog | Safe paginated approval repository queries and indexes verified. |
 | C1-03 | [#15](https://github.com/TheHighBrid/Agents-Gang/issues/15) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01, C1-02 | Backlog | Protected list/detail API contract and redaction tests pass. |
