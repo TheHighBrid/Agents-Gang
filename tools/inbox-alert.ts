@@ -1,4 +1,5 @@
 import type { TriagedMessage } from "../jobs/inboxTriage";
+import { defineTool, executeTool, type ToolExecutionContext } from "../lib/execution/tool-execution";
 
 export type InboxAlertMessage = Pick<
   TriagedMessage,
@@ -12,7 +13,59 @@ export type InboxAlertDelivery = {
   skipped: number;
 };
 
-function toAlertMessage(message: TriagedMessage): InboxAlertMessage {
+function parseInboxAlertMessages(input: unknown): InboxAlertMessage[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new Error("At least one inbox alert message is required");
+  }
+  return input.map((message) => {
+    if (
+      !message ||
+      typeof message !== "object" ||
+      !("id" in message) ||
+      typeof message.id !== "string" ||
+      !("threadId" in message) ||
+      typeof message.threadId !== "string" ||
+      !("from" in message) ||
+      (typeof message.from !== "string" && message.from !== null) ||
+      !("to" in message) ||
+      (typeof message.to !== "string" && message.to !== null) ||
+      !("subject" in message) ||
+      (typeof message.subject !== "string" && message.subject !== null) ||
+      !("receivedAt" in message) ||
+      (typeof message.receivedAt !== "string" && message.receivedAt !== null) ||
+      !("priority" in message) ||
+      message.priority !== "high" ||
+      !("category" in message) ||
+      message.category !== "action_required"
+    ) {
+      throw new Error("Inbox alerts require valid high-priority message metadata");
+    }
+    return pickAlertFields(message as InboxAlertMessage);
+  });
+}
+
+export function createInboxAlertTool(notifier: InboxAlertNotifier) {
+  return defineTool({
+    name: "inbox.alert.send",
+    capability: "execute" as const,
+    riskLevel: 2 as const,
+    parseInput: parseInboxAlertMessages,
+    execute: async (messages: InboxAlertMessage[]) => {
+      await notifier(messages);
+      return { sent: messages.length };
+    },
+  });
+}
+
+export function runInboxAlert(
+  context: ToolExecutionContext,
+  messages: InboxAlertMessage[],
+  notifier: InboxAlertNotifier = (alertMessages) => postInboxAlert(alertMessages),
+) {
+  return executeTool(context, createInboxAlertTool(notifier), messages);
+}
+
+function pickAlertFields(message: InboxAlertMessage): InboxAlertMessage {
   return {
     id: message.id,
     threadId: message.threadId,
@@ -23,6 +76,10 @@ function toAlertMessage(message: TriagedMessage): InboxAlertMessage {
     priority: message.priority,
     category: message.category,
   };
+}
+
+function toAlertMessage(message: TriagedMessage): InboxAlertMessage {
+  return pickAlertFields(message);
 }
 
 export async function notifyHighPriorityMessages(
