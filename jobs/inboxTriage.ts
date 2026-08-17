@@ -2,7 +2,7 @@ import type { ToolExecutionContext } from "../lib/execution/tool-execution";
 import { runGovernedJob } from "./governedJob";
 import { runGmailSearch, type GmailSearchReader } from "../tools/gmail-tool";
 import type { GmailMessageSummary } from "../tools/gmail";
-import { notifyHighPriorityMessages, postInboxAlert, runInboxAlert, type InboxAlertNotifier } from "../tools/inbox-alert";
+import { notifyHighPriorityMessages, runInboxAlert, type InboxAlertNotifier } from "../tools/inbox-alert";
 import { createGmailDraftApproval, gmailDraftPayloadDigest, type GmailDraftInput } from "../tools/gmail-draft-tool";
 
 type TriagePriority = "high" | "normal" | "low";
