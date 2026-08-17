@@ -1,4 +1,5 @@
 import { evaluateApprovalGate, type RiskLevel } from "./approval-engine";
+import { getToolPolicy } from "../policy/registry";
 import type { ExecutionRepository } from "./repository";
 
 export type ToolCapability = "read" | "draft" | "prepare" | "execute";
@@ -39,6 +40,10 @@ export type ToolSuccess<Output> = {
 };
 
 export function defineTool<Input, Output>(definition: ToolDefinition<Input, Output>) {
+  const policy = getToolPolicy(definition.name);
+  if (policy && (policy.capability !== definition.capability || policy.riskLevel !== definition.riskLevel)) {
+    throw new Error(`Tool definition does not match policy registry: ${definition.name}`);
+  }
   return definition;
 }
 
