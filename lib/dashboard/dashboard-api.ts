@@ -16,8 +16,8 @@ export type DashboardRun = Pick<
 
 export type DashboardRoutingDecision = Pick<
   RoutingDecisionRecord,
-  "id" | "runId" | "selectedAgent" | "riskLevel" | "reason" | "neededTools" | "approvalRequired" | "createdAt"
->;
+  "id" | "runId" | "selectedAgent" | "riskLevel" | "neededTools" | "approvalRequired" | "createdAt"
+> & { reason: string };
 
 export type DashboardToolCall = Pick<
   ToolCallRecord,
@@ -81,11 +81,18 @@ function toDashboardRoutingDecision(decision: RoutingDecisionRecord): DashboardR
     runId: decision.runId,
     selectedAgent: decision.selectedAgent,
     riskLevel: decision.riskLevel,
-    reason: decision.reason,
+    reason: safeRoutingReason(decision),
     neededTools: [...decision.neededTools],
     approvalRequired: decision.approvalRequired,
     createdAt: decision.createdAt,
   };
+}
+
+function safeRoutingReason(decision: RoutingDecisionRecord): string {
+  const toolCount = decision.neededTools.length;
+  const toolLabel = toolCount === 1 ? "governed tool" : "governed tools";
+  const approvalLabel = decision.approvalRequired ? "approval required" : "no approval required";
+  return `${decision.selectedAgent} selected at risk ${decision.riskLevel}; ${toolCount} ${toolLabel}; ${approvalLabel}.`;
 }
 
 function toDashboardToolCall(toolCall: ToolCallRecord): DashboardToolCall {
