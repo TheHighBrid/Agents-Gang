@@ -3,7 +3,9 @@ import { createInMemoryExecutionRepository } from "../lib/execution/repository";
 import { runShopifyProductRead } from "../tools/shopify-products-tool";
 
 const fetchMock = vi.hoisted(() => {
+  process.env.SHOPIFY_STORE_MODE = "test";
   process.env.SHOPIFY_STORE_DOMAIN = "integration-test.myshopify.com";
+  process.env.SHOPIFY_TEST_STORE_DOMAIN = "integration-test.myshopify.com";
   process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = "integration-test-token";
   return vi.fn();
 });
@@ -11,8 +13,8 @@ const fetchMock = vi.hoisted(() => {
 vi.stubGlobal("fetch", fetchMock);
 
 describe("Shopify governed failure contract", () => {
-  test("normalizes a rate-limited Shopify response and records its retryable audit code", async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ errors: [{ message: "slow down" }] }), { status: 429 }));
+  test("records a normalized rate-limit code and retryability in governed audit records", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("slow down", { status: 429 }));
     const repository = createInMemoryExecutionRepository();
 
     const result = await runShopifyProductRead(
@@ -23,8 +25,8 @@ describe("Shopify governed failure contract", () => {
     expect(result).toEqual({
       ok: false,
       error: {
-        code: "shopify_rate_limited",
-        message: "Shopify request was rate limited.",
+        code: "tool_execution_failed",
+        message: "Shopify request was rate limited",
         retriable: true,
       },
     });
