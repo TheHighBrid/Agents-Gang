@@ -19,15 +19,15 @@
 
 ## 2. Current Evidence Checkpoint — 17 August 2026
 
-The following milestone evidence is now present on `main` and has been reflected in the task tracker: C0-01 through C0-03, C1-01 through C1-04, C1-06, C2-01, and C3-05. The corresponding merged delivery evidence is PRs #40, #41, #42, #43, #44, #45, and #46, with the repository quality gate and Shopify integration checks passing on the current delivery branches.
+The following milestone evidence is now present on `main` and has been reflected in the task tracker: C0-01 through C0-03, C1-01 through C1-04, C1-06, C2-01, and C3-05. C1-05 is implemented on branch `agent/17-capability-risk-policy` and is ready for review. The corresponding merged delivery evidence is PRs #40, #41, #42, #43, #44, #45, and #46, with the repository quality gate and Shopify integration checks passing on the current delivery branches.
 
 | Workstream | Current status | Evidence or next action |
 |---|---|---|
 | Program control | Accepted | CI quality gate, planning metadata, release evidence register, and decision-log conventions are merged. |
-| Approval control plane | Accepted for implemented scope | Founder boundary, paginated approval contract, protected APIs, state-safe decisions, and threat-model regressions are merged. The capability/risk registry C1-05 remains open and must not be treated as complete. |
+| Approval control plane | C1-05 ready for review | Founder boundary, paginated approval contract, protected APIs, state-safe decisions, threat-model regressions, and the typed capability/risk registry are implemented. C1-05 has 16 registered tools plus metadata-drift enforcement. |
 | Founder operations surface | C2-01 accepted; C2-02 active | Persisted approval queue/detail UI is merged. PR #48 is the active guarded decision workflow and is awaiting review/verification. |
-| Governed integration fabric | C3-05 accepted for currently enabled scheduled audits; C3-01 remains open | Shopify production/test-store boundary and policy evidence remain required. |
-| Codex review blocker | Active repair | PR #47’s quality gate failed at TypeScript compilation because `jobs/inboxTriage.ts` referenced `runInboxAlert` without importing it. Repair branch `agent/codex-fix-inbox-alert-typecheck` claims this blocker and will rerun the full quality gate. |
+| Governed integration fabric | C3-05 accepted; C3-01 unblocked | C1-05 now supplies the policy dependency. Continue with the Shopify test-store boundary, mutation policy gates, normalized failures, and audit evidence. |
+| Codex review blocker | Resolved | PR #47’s missing `runInboxAlert` import and stale inbox tool-call expectation were fixed on the Codex review branch; the final quality gate and Shopify integration checks passed. |
 
 ## 3. Week-by-Week Operating Plan
 
