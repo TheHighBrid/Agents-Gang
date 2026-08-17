@@ -1,9 +1,23 @@
-export async function saveAgentRun() {
-  throw new Error("Agent run persistence is not implemented yet");
+import type {
+  ApprovalRecord,
+  CreateApprovalInput,
+  CreateAgentRunInput,
+  ExecutionRepository,
+  AgentRunRecord,
+} from "../lib/execution/repository";
+
+export async function saveAgentRun(
+  repository: ExecutionRepository,
+  input: CreateAgentRunInput,
+): Promise<AgentRunRecord> {
+  return repository.createAgentRun(input);
 }
 
-export async function saveApprovalRequest() {
-  throw new Error("Approval persistence is not implemented yet");
+export async function saveApprovalRequest(
+  repository: ExecutionRepository,
+  input: CreateApprovalInput,
+): Promise<ApprovalRecord> {
+  return repository.createApproval(input);
 }
 
 export async function getBrandMemory() {
