@@ -15,14 +15,14 @@ describe("founder approvals UI contract", () => {
     expect(page).not.toContain("payloadSummary: string");
   });
 
-  it("uses the protected server list filter and detail endpoints", () => {
+  it("uses the protected server list and detail endpoints", () => {
     const page = read("app/approvals/page.tsx");
     expect(page).toContain("URLSearchParams");
     expect(page).toContain("parameters.set(\"status\", filter)");
     expect(page).toContain("/api/approvals?");
     expect(page).toContain("method: \"GET\"");
     expect(page).toContain("encodeURIComponent(approvalId)");
-    expect(page).toContain("setSelectedApproval");
+    expect(page).toContain("fetchPersistedApproval");
   });
 
   it("exposes explicit loading, error, empty, focus, and color-independent status semantics", () => {
@@ -36,12 +36,35 @@ describe("founder approvals UI contract", () => {
     expect(page).toContain("No approval requests match this view");
   });
 
-  it("includes responsive detail styling and non-color status treatments", () => {
+  it("keeps the protected decision API authoritative for approve and reject outcomes", () => {
+    const page = read("app/approvals/page.tsx");
+    expect(page).toContain("method: \"PATCH\"");
+    expect(page).toContain("response.status === 409");
+    expect(page).toContain("decisionConflictMessage(latest.status)");
+    expect(page).toContain("decisionSuccessMessage(status)");
+    expect(page).toContain("No decision state was assumed because the protected API did not confirm the change");
+    expect(page).not.toContain("status: status,");
+  });
+
+  it("requires explicit high-impact confirmation and supports keyboard cancellation", () => {
+    const page = read("app/approvals/page.tsx");
+    expect(page).toContain("decisionConfirmationText(approval, confirming)");
+    expect(page).toContain("role=\"alertdialog\"");
+    expect(page).toContain("aria-modal=\"true\"");
+    expect(page).toContain("event.key === \"Escape\"");
+    expect(page).toContain("decisionTriggerRef.current?.focus()");
+    expect(page).toContain("Decision controls are unavailable because persisted state is");
+  });
+
+  it("includes responsive detail styling and visible decision-state treatments", () => {
     const css = read("app/approvals/approvals.css");
     expect(css).toContain(".status-badge.expired");
     expect(css).toContain(".status-badge.consumed");
     expect(css).toContain(".approval-detail");
     expect(css).toContain(".approval-layout");
+    expect(css).toContain(".decision-state.conflict");
+    expect(css).toContain(".decision-state.error");
+    expect(css).toContain(".terminal-decision-note");
     expect(css).toContain("@media (max-width: 760px)");
   });
 });
