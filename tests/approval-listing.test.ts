@@ -40,3 +40,22 @@ describe("approval listing", () => {
     expect(approvals[1]?.status).toBe("pending");
   });
 });
+
+test("filters and cursor-paginates approvals with a deterministic tie-breaker", async () => {
+  const repository = createInMemoryExecutionRepository({
+    clock: () => new Date("2026-08-17T10:00:00.000Z"),
+    idFactory: (() => { let id = 0; return () => `approval-${++id}`; })(),
+  });
+  for (const actionType of ["publish", "publish", "delete"]) {
+    await repository.createApproval({
+      requestingAgent: "agent", actionType, target: { type: "product", id: actionType },
+      riskLevel: 3, payloadSummary: "safe summary",
+    });
+  }
+  const first = await repository.queryApprovals({ actionType: "publish", limit: 1 });
+  expect(first.approvals.map(({ id }) => id)).toEqual(["approval-2"]);
+  expect(first.nextCursor).toBeTypeOf("string");
+  const second = await repository.queryApprovals({ actionType: "publish", limit: 1, cursor: first.nextCursor });
+  expect(second.approvals.map(({ id }) => id)).toEqual(["approval-1"]);
+  expect(second.nextCursor).toBeUndefined();
+});

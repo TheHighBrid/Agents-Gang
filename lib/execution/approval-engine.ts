@@ -1,6 +1,6 @@
 export type RiskLevel = 1 | 2 | 3 | 4;
 
-export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "consumed";
 
 export type ApprovalReference = {
   status: ApprovalStatus;

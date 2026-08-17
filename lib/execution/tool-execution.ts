@@ -135,6 +135,7 @@ export async function executeTool<Input, Output>(
   }
 
   try {
+    if (matchingApproval) await context.repository.consumeApproval(matchingApproval.id);
     const data = await tool.execute(input);
     await context.repository.recordToolCall({
       runId: context.runId,

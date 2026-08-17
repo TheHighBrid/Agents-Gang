@@ -12,7 +12,9 @@ import type {
   RecordToolCallInput,
   RoutingDecisionRecord,
   ToolCallRecord,
+  ApprovalQuery,
 } from "./repository";
+import { decodeApprovalCursor, encodeApprovalCursor } from "./repository";
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -259,12 +261,49 @@ export function createSupabaseExecutionRepository({
       return toApprovalRecord(rows[0]);
     },
 
+    async consumeApproval(approvalId: string) {
+      const timestamp = new Date().toISOString();
+      const rows = await requestRows<SupabaseApprovalRow>(
+        `/approval_requests?id=eq.${encodeURIComponent(approvalId)}&status=eq.approved`,
+        {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify({ status: "consumed", updated_at: timestamp }),
+        },
+      );
+      if (rows.length !== 1) throw new ExecutionPersistenceError("Approval request is not executable");
+      return toApprovalRecord(rows[0]);
+    },
+
     async listApprovals() {
       const rows = await requestRows<SupabaseApprovalRow>(
-        "/approval_requests?select=*&order=requested_at.desc",
+        "/approval_requests?select=*&order=created_at.desc,id.desc",
         { method: "GET" },
       );
       return rows.map(toApprovalRecord);
+    },
+
+    async queryApprovals(query: ApprovalQuery) {
+      const limit = Math.min(Math.max(query.limit ?? 25, 1), 100);
+      const parameters = new URLSearchParams({
+        select: "*",
+        order: "created_at.desc,id.desc",
+        limit: String(limit + 1),
+      });
+      if (query.status) parameters.set("status", `eq.${query.status}`);
+      if (query.actionType) parameters.set("action_type", `eq.${query.actionType}`);
+      if (query.requestedFrom) parameters.set("created_at", `gte.${query.requestedFrom}`);
+      if (query.requestedTo) parameters.append("created_at", `lte.${query.requestedTo}`);
+      if (query.cursor) {
+        const cursor = decodeApprovalCursor(query.cursor);
+        parameters.set("or", `(created_at.lt.${cursor.requestedAt},and(created_at.eq.${cursor.requestedAt},id.lt.${cursor.id}))`);
+      }
+      const rows = await requestRows<SupabaseApprovalRow>(`/approval_requests?${parameters}`, { method: "GET" });
+      const approvals = rows.slice(0, limit).map(toApprovalRecord);
+      return {
+        approvals,
+        nextCursor: rows.length > limit && approvals.length ? encodeApprovalCursor(approvals[approvals.length - 1]!) : undefined,
+      };
     },
 
     async createAgentRun(input: CreateAgentRunInput) {

@@ -202,3 +202,15 @@ test("records a tool failure as an audit event", async () => {
     },
   ]);
 });
+
+test("consumes an approval so replay cannot execute the effect twice", async () => {
+  const repository = createInMemoryExecutionRepository();
+  const approval = await createApprovedAction(repository, "shopify.product.update");
+  let executions = 0;
+  const tool = defineTool({ ...productUpdateTool, async execute() { executions += 1; return { updated: true }; } });
+  const context = { repository, runId: "run-replay", agentName: "shopify_ops_agent", approvalId: approval.id };
+  await expect(executeTool(context, tool, { productId: "gid://shopify/Product/123" })).resolves.toMatchObject({ ok: true });
+  await expect(executeTool(context, tool, { productId: "gid://shopify/Product/123" })).resolves.toMatchObject({ ok: false });
+  expect(executions).toBe(1);
+  await expect(repository.getApproval(approval.id)).resolves.toMatchObject({ status: "consumed" });
+});
