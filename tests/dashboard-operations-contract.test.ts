@@ -92,6 +92,8 @@ describe("persisted operations dashboard contract", () => {
       expect(body.runs[0]).not.toHaveProperty(unsafeField);
     }
     expect(body.routingDecisions[0]).toEqual(expect.objectContaining({ runId: newer.id, selectedAgent: "shopify_ops_agent" }));
+    expect(body.routingDecisions[0].reason).toContain("shopify_ops_agent selected at risk 3");
+    expect(body.routingDecisions[0].reason).not.toContain("Store operation requires Shopify route");
     expect(body.toolCalls[0]).toEqual(expect.objectContaining({ runId: newer.id, outcome: "failed", errorCode: "transport_timeout" }));
     expect(body.auditEvents[0]).not.toHaveProperty("metadata");
     expect(body.approvals[0]).toEqual(expect.objectContaining({ status: "pending", actionType: "shopify.product.update" }));
