@@ -259,6 +259,14 @@ export function createSupabaseExecutionRepository({
       return toApprovalRecord(rows[0]);
     },
 
+    async listApprovals() {
+      const rows = await requestRows<SupabaseApprovalRow>(
+        "/approval_requests?select=*&order=requested_at.desc",
+        { method: "GET" },
+      );
+      return rows.map(toApprovalRecord);
+    },
+
     async createAgentRun(input: CreateAgentRunInput) {
       const rows = await requestRows<SupabaseAgentRunRow>("/agent_runs", {
         method: "POST",

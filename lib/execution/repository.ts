@@ -107,6 +107,7 @@ export type ExecutionRepository = {
   createApproval(input: CreateApprovalInput): Promise<ApprovalRecord>;
   getApproval(approvalId: string): Promise<ApprovalRecord | undefined>;
   decideApproval(input: ApprovalDecisionInput): Promise<ApprovalRecord>;
+  listApprovals(): Promise<ApprovalRecord[]>;
   createAgentRun(input: CreateAgentRunInput): Promise<AgentRunRecord>;
   completeAgentRun(input: CompleteAgentRunInput): Promise<AgentRunRecord>;
   recordRoutingDecision(input: RecordRoutingDecisionInput): Promise<RoutingDecisionRecord>;
@@ -169,6 +170,12 @@ export function createInMemoryExecutionRepository({
       };
       approvals.set(decided.id, decided);
       return decided;
+    },
+
+    async listApprovals() {
+      return [...approvals.values()].sort((left, right) =>
+        right.requestedAt.localeCompare(left.requestedAt),
+      );
     },
 
     async createAgentRun(input) {
