@@ -1,23 +1,12 @@
-import { isApprovalApiAuthorized } from "../../../../lib/approvals/auth";
+import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../../lib/approvals/auth";
 import { createExecutionRepository, ExecutionRepositoryConfigurationError } from "../../../../lib/execution/execution-repository-factory";
-
-function unauthorizedResponse() {
-  return Response.json(
-    { error: "Approval API authentication required" },
-    {
-      status: 401,
-      headers: { "WWW-Authenticate": "Bearer" },
-    },
-  );
-}
 
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ approvalId: string }> },
 ) {
-  if (!isApprovalApiAuthorized(request, process.env.APPROVALS_API_TOKEN)) {
-    return unauthorizedResponse();
-  }
+  const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
+  if (authorization) return authorization;
 
   const { approvalId } = await context.params;
   if (!approvalId) {

@@ -12,13 +12,13 @@ type Snapshot = {
 export default function DashboardPage() {
   const [token, setToken] = useState("");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [message, setMessage] = useState("Enter the founder token to load execution telemetry.");
+  const [message, setMessage] = useState("Enter a signed founder session to load execution telemetry.");
   const [loading, setLoading] = useState(false);
 
   async function loadDashboard(event?: FormEvent) {
     event?.preventDefault();
     if (!token.trim()) {
-      setMessage("A founder approval token is required.");
+      setMessage("A signed founder session is required.");
       return;
     }
     setLoading(true);
@@ -62,10 +62,10 @@ export default function DashboardPage() {
         <div>
           <p className="section-kicker">Founder access</p>
           <h2 id="dashboard-access-heading">Load live telemetry</h2>
-          <p className="muted">Execution records remain server-side. The token is held in memory for this browser session only.</p>
+          <p className="muted">Execution records remain server-side. The signed founder session is held in memory for this browser session only.</p>
         </div>
         <form className="access-form" onSubmit={loadDashboard}>
-          <label htmlFor="dashboard-token">Approval API token</label>
+          <label htmlFor="dashboard-token">Founder session token</label>
           <div className="access-row">
             <input id="dashboard-token" type="password" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Paste token" autoComplete="off" />
             <button type="submit" disabled={loading}>{loading ? "Loading…" : "Refresh telemetry"}</button>

@@ -1,14 +1,10 @@
-import { isApprovalApiAuthorized } from "../../../lib/approvals/auth";
+import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../lib/approvals/auth";
 import { getDashboardSnapshotResponse } from "../../../lib/dashboard/dashboard-api";
 import { createExecutionRepository, ExecutionRepositoryConfigurationError } from "../../../lib/execution/execution-repository-factory";
 
 export async function GET(request: Request) {
-  if (!isApprovalApiAuthorized(request, process.env.APPROVALS_API_TOKEN)) {
-    return Response.json(
-      { error: "Dashboard API authentication required" },
-      { status: 401, headers: { "WWW-Authenticate": "Bearer" } },
-    );
-  }
+  const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
+  if (authorization) return authorization;
 
   try {
     const repository = createExecutionRepository(process.env);

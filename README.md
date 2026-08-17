@@ -33,7 +33,7 @@ The current product-page scan job invokes Shopify through this same tool contrac
 
 ## Approval desk
 
-The `/approvals` page provides a persisted approval queue backed by the execution repository. Configure the server-side `APPROVALS_API_TOKEN` environment variable before using it. The browser sends the token as a Bearer credential only to `/api/approvals`; the API supports queue loading and explicit approve/reject decisions with a required decision note. Do not expose the token through client configuration or commit it to the repository.
+The `/approvals` page provides a persisted approval queue backed by the execution repository. Configure the server-side `FOUNDER_AUTH_SECRET` before using the approval or observability APIs. Those APIs accept only signed founder-session credentials, resolve identity and role in server code, deny anonymous, malformed, expired, revoked, and non-founder sessions by default, and support queue loading plus explicit approve/reject decisions with a required decision note. The signing secret and revocation configuration must remain server-side and must never be exposed through client configuration, logs, or committed files.
 
 ## Execution roadmap
 
