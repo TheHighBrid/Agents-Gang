@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { GmailRequestError, searchGmailMessages } from "../tools/gmail";
+import { GmailRequestError, searchGmailMessages, sendGmailMessage, summarizeThread } from "../tools/gmail";
 
 describe("Gmail read adapter", () => {
   test("rejects invalid search limits before making requests", async () => {
@@ -43,5 +43,52 @@ describe("Gmail read adapter", () => {
     await expect(searchGmailMessages("in:inbox", { fetcher: vi.fn() })).rejects.toThrow("Gmail access token is not configured");
     const fetcher = vi.fn().mockResolvedValue(new Response("bad gateway", { status: 503 }));
     await expect(searchGmailMessages("in:inbox", { fetcher, accessToken: "token" })).rejects.toBeInstanceOf(GmailRequestError);
+  });
+
+  test("sends an explicitly supplied MIME message only through the Gmail send endpoint", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "sent-1", threadId: "t1" }), { status: 200 }));
+    await expect(sendGmailMessage({
+      messageId: "m1",
+      threadId: "t1",
+      to: "recipient@example.com",
+      subject: "Approved message",
+      body: "Body text",
+      idempotencyKey: "send-m1-v1",
+    }, { accessToken: "token", fetcher })).resolves.toEqual({ id: "sent-1", threadId: "t1" });
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
+    const request = fetcher.mock.calls[0]?.[1] as RequestInit;
+    const payload = JSON.parse(request.body as string) as { raw: string };
+    expect(Buffer.from(payload.raw, "base64url").toString("utf8")).toContain("Subject: Approved message");
+    expect(Buffer.from(payload.raw, "base64url").toString("utf8")).toContain("Body text");
+  });
+
+  test("summarizes thread metadata without returning message bodies", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: "t1",
+      messages: [{
+        id: "m1",
+        threadId: "t1",
+        snippet: "Thread snippet",
+        payload: {
+          headers: [
+            { name: "From", value: "sender@example.com" },
+            { name: "Subject", value: "Thread subject" },
+          ],
+          body: { data: "must-not-leak" },
+        },
+      }],
+    }), { status: 200 }));
+    await expect(summarizeThread("t1", { accessToken: "token", fetcher })).resolves.toEqual([{
+      id: "m1",
+      threadId: "t1",
+      from: "sender@example.com",
+      to: null,
+      subject: "Thread subject",
+      snippet: "Thread snippet",
+      receivedAt: null,
+      labelIds: [],
+    }]);
+    expect(fetcher.mock.calls[0]?.[0].toString()).toContain("/threads/t1");
+    expect(fetcher.mock.calls[0]?.[0].toString()).not.toContain("format=full");
   });
 });
