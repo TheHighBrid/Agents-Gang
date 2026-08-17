@@ -106,6 +106,7 @@ export type RecordToolCallInput = Omit<ToolCallRecord, "id" | "createdAt">;
 export type ExecutionRepository = {
   createApproval(input: CreateApprovalInput): Promise<ApprovalRecord>;
   getApproval(approvalId: string): Promise<ApprovalRecord | undefined>;
+  listApprovals(): Promise<ApprovalRecord[]>;
   decideApproval(input: ApprovalDecisionInput): Promise<ApprovalRecord>;
   createAgentRun(input: CreateAgentRunInput): Promise<AgentRunRecord>;
   completeAgentRun(input: CompleteAgentRunInput): Promise<AgentRunRecord>;
@@ -147,6 +148,10 @@ export function createInMemoryExecutionRepository({
 
     async getApproval(approvalId) {
       return approvals.get(approvalId);
+    },
+
+    async listApprovals() {
+      return [...approvals.values()];
     },
 
     async decideApproval(input) {

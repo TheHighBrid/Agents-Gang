@@ -238,6 +238,14 @@ export function createSupabaseExecutionRepository({
       return rows[0] ? toApprovalRecord(rows[0]) : undefined;
     },
 
+    async listApprovals() {
+      const rows = await requestRows<SupabaseApprovalRow>(
+        "/approval_requests?select=*&order=created_at.desc",
+        { method: "GET" },
+      );
+      return rows.map(toApprovalRecord);
+    },
+
     async decideApproval(input: ApprovalDecisionInput) {
       const timestamp = new Date().toISOString();
       const rows = await requestRows<SupabaseApprovalRow>(

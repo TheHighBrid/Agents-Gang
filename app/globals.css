@@ -13,3 +13,28 @@ main {
   min-height: 100vh;
   padding: 48px;
 }
+
+.approval-shell { max-width: 1120px; margin: 0 auto; }
+.approval-header { display: flex; justify-content: space-between; gap: 32px; align-items: flex-end; margin-bottom: 40px; }
+.eyebrow { color: #b9a889; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; margin: 0 0 12px; }
+h1 { font-family: Georgia, serif; font-size: clamp(42px, 7vw, 76px); font-weight: 400; letter-spacing: -.05em; margin: 0; }
+.lede { color: #aaa5a0; font-size: 17px; max-width: 580px; line-height: 1.6; }
+.secondary-button, .approve-button, .reject-button { border: 1px solid #454247; border-radius: 999px; padding: 11px 18px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.secondary-button:hover { background: #19181c; }
+.approval-list { display: grid; gap: 16px; }
+.approval-card { background: #121216; border: 1px solid #29282d; border-radius: 18px; padding: 24px; }
+.card-topline, .decision-row, .metadata { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.status, .risk { border-radius: 999px; font-size: 12px; padding: 6px 10px; }
+.status-pending { color: #e8c681; background: #332a18; }.status-approved { color: #9dd2af; background: #172c20; }.status-rejected, .status-expired { color: #e0a4a4; background: #321d20; }
+.risk { color: #aaa5a0; background: #1d1c21; }
+.approval-card h2 { font-family: Georgia, serif; font-weight: 400; font-size: 28px; margin: 24px 0 8px; }
+.summary, .decision-note { color: #c3beb7; line-height: 1.6; }.metadata { justify-content: flex-start; flex-wrap: wrap; margin: 24px 0; }.metadata div { min-width: 180px; }.metadata dt { color: #817d78; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }.metadata dd { margin: 6px 0 0; color: #e6e0d7; font-size: 14px; overflow-wrap: anywhere; }
+.decision-row { justify-content: flex-start; border-top: 1px solid #29282d; padding-top: 20px; }.approve-button { background: #e8e1d5; color: #171519; border-color: #e8e1d5; }.reject-button { color: #e0a4a4; }.approve-button:disabled, .reject-button:disabled, .secondary-button:disabled { opacity: .5; cursor: wait; }
+.empty-state { border: 1px dashed #3b3940; border-radius: 18px; padding: 48px; color: #aaa5a0; display: grid; gap: 10px; }.empty-state strong { color: #e6e0d7; font-family: Georgia, serif; font-size: 24px; font-weight: 400; }.error-banner { color: #f2c4c4; background: #321d20; border: 1px solid #65363c; border-radius: 12px; padding: 14px 16px; }
+@media (max-width: 700px) { main { padding: 28px 20px; }.approval-header { align-items: flex-start; flex-direction: column; }.secondary-button { align-self: stretch; }.approval-card { padding: 18px; }.card-topline { align-items: flex-start; }.metadata { display: grid; }.decision-row { display: grid; grid-template-columns: 1fr 1fr; }.approve-button, .reject-button { width: 100%; } }
+
+.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+.metric-card, .dashboard-panel { background: #121216; border: 1px solid #29282d; border-radius: 18px; }
+.metric-card { padding: 20px; display: grid; gap: 10px; }.metric-card span, .metric-card small, .panel-heading > span, .muted { color: #817d78; }.metric-card strong { font: 400 42px/1 Georgia, serif; }.metric-card small { font-size: 12px; }.dashboard-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }.dashboard-panel { padding: 24px; }.panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 1px solid #29282d; padding-bottom: 18px; margin-bottom: 4px; }.panel-heading h2 { margin: 0; font: 400 28px Georgia, serif; }.panel-heading .eyebrow { margin-bottom: 8px; }.ledger-list { display: grid; }.ledger-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 16px 0; border-bottom: 1px solid #222126; }.ledger-row:last-child { border-bottom: 0; }.ledger-row strong { font-size: 14px; }.ledger-row p { color: #aaa5a0; font-size: 13px; margin: 6px 0 0; overflow-wrap: anywhere; }.ledger-meta { display: grid; justify-items: end; gap: 8px; flex-shrink: 0; }.ledger-meta small { color: #817d78; font-size: 11px; }
+@media (max-width: 800px) { .metric-grid { grid-template-columns: repeat(2, 1fr); }.dashboard-columns { grid-template-columns: 1fr; } }
+@media (max-width: 500px) { .metric-grid { grid-template-columns: 1fr 1fr; }.metric-card { padding: 15px; }.metric-card strong { font-size: 32px; }.dashboard-panel { padding: 18px; }.ledger-row { align-items: flex-start; flex-direction: column; }.ledger-meta { justify-items: start; } }

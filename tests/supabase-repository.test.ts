@@ -108,3 +108,96 @@ test("persists an agent run using the declared execution schema", async () => {
   });
   expect(run).toMatchObject({ id: "run-1", status: "running" });
 });
+
+
+test("lists agent runs newest-first and maps completion details", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const repository = createSupabaseExecutionRepository({
+    url: "https://project.supabase.co",
+    serviceRoleKey: "service-role-secret",
+    request: async (url, init) => {
+      requests.push({ url: String(url), init });
+      return new Response(JSON.stringify([{
+        id: "run-2", agent_name: "shopify_ops_agent", provider: "anthropic", model: "claude-test",
+        route_agent: "shopify_ops_agent", risk_level: 3, status: "completed", created_at: "2026-08-17T12:00:00.000Z",
+        completed_at: "2026-08-17T12:01:00.000Z", input_summary: "Update a product.", output_summary: "Prepared update.",
+        error_code: null, duration_ms: 60000,
+      }]), { status: 200 });
+    },
+  });
+
+  await expect(repository.listAgentRuns()).resolves.toEqual([{
+    id: "run-2", agentName: "shopify_ops_agent", provider: "anthropic", model: "claude-test", routeAgent: "shopify_ops_agent",
+    riskLevel: 3, status: "completed", createdAt: "2026-08-17T12:00:00.000Z", completedAt: "2026-08-17T12:01:00.000Z",
+    inputSummary: "Update a product.", outputSummary: "Prepared update.", durationMs: 60000,
+  }]);
+  expect(requests[0]).toMatchObject({ url: "https://project.supabase.co/rest/v1/agent_runs?select=*&order=created_at.desc", init: { method: "GET" } });
+});
+
+test("lists routing decisions newest-first and maps governance policy", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const repository = createSupabaseExecutionRepository({
+    url: "https://project.supabase.co",
+    serviceRoleKey: "service-role-secret",
+    request: async (url, init) => {
+      requests.push({ url: String(url), init });
+      return new Response(JSON.stringify([{
+        id: "route-1", run_id: "run-2", selected_agent: "shopify_ops_agent", risk_level: 3,
+        reason: "Requires a product update.", needed_tools: ["shopify.product.update"], approval_required: true,
+        created_at: "2026-08-17T12:00:01.000Z",
+      }]), { status: 200 });
+    },
+  });
+
+  await expect(repository.listRoutingDecisions()).resolves.toEqual([{
+    id: "route-1", runId: "run-2", selectedAgent: "shopify_ops_agent", riskLevel: 3,
+    reason: "Requires a product update.", neededTools: ["shopify.product.update"], approvalRequired: true,
+    createdAt: "2026-08-17T12:00:01.000Z",
+  }]);
+  expect(requests[0]).toMatchObject({ url: "https://project.supabase.co/rest/v1/routing_decisions?select=*&order=created_at.desc", init: { method: "GET" } });
+});
+
+test("lists audit events newest-first and maps nullable event references", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const repository = createSupabaseExecutionRepository({
+    url: "https://project.supabase.co",
+    serviceRoleKey: "service-role-secret",
+    request: async (url, init) => {
+      requests.push({ url: String(url), init });
+      return new Response(JSON.stringify([{
+        id: "audit-1", run_id: "run-2", agent_name: "shopify_ops_agent", tool_name: "shopify.product.update",
+        risk_level: 3, approval_id: null, event_type: "tool_blocked", outcome: "blocked", metadata: { reason: "approval_required" },
+        created_at: "2026-08-17T12:00:02.000Z",
+      }]), { status: 200 });
+    },
+  });
+
+  await expect(repository.listAuditEvents()).resolves.toEqual([{
+    id: "audit-1", runId: "run-2", agentName: "shopify_ops_agent", toolName: "shopify.product.update", riskLevel: 3,
+    eventType: "tool_blocked", outcome: "blocked", metadata: { reason: "approval_required" }, createdAt: "2026-08-17T12:00:02.000Z",
+  }]);
+  expect(requests[0]).toMatchObject({ url: "https://project.supabase.co/rest/v1/audit_events?select=*&order=created_at.desc", init: { method: "GET" } });
+});
+
+test("lists tool calls newest-first and maps approval and failure metadata", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const repository = createSupabaseExecutionRepository({
+    url: "https://project.supabase.co",
+    serviceRoleKey: "service-role-secret",
+    request: async (url, init) => {
+      requests.push({ url: String(url), init });
+      return new Response(JSON.stringify([{
+        id: "tool-1", run_id: "run-2", agent_name: "shopify_ops_agent", tool_name: "shopify.product.update",
+        capability: "execute", risk_level: 4, approval_id: "approval-1", outcome: "failed", error_code: "shopify_rate_limited",
+        created_at: "2026-08-17T12:00:03.000Z",
+      }]), { status: 200 });
+    },
+  });
+
+  await expect(repository.listToolCalls()).resolves.toEqual([{
+    id: "tool-1", runId: "run-2", agentName: "shopify_ops_agent", toolName: "shopify.product.update",
+    capability: "execute", riskLevel: 4, approvalId: "approval-1", outcome: "failed", errorCode: "shopify_rate_limited",
+    createdAt: "2026-08-17T12:00:03.000Z",
+  }]);
+  expect(requests[0]).toMatchObject({ url: "https://project.supabase.co/rest/v1/tool_calls?select=*&order=created_at.desc", init: { method: "GET" } });
+});
