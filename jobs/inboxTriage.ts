@@ -2,6 +2,7 @@ import type { ToolExecutionContext } from "../lib/execution/tool-execution";
 import { runGovernedJob } from "./governedJob";
 import { runGmailSearch, type GmailSearchReader } from "../tools/gmail-tool";
 import type { GmailMessageSummary } from "../tools/gmail";
+import { notifyHighPriorityMessages, postInboxAlert, type InboxAlertNotifier } from "../tools/inbox-alert";
 
 type TriagePriority = "high" | "normal" | "low";
 type TriageCategory = "action_required" | "notification" | "general";
@@ -40,6 +41,7 @@ export async function runInboxTriage(
 export function runInboxTriageJob(
   repository: ToolExecutionContext["repository"],
   reader?: GmailSearchReader,
+  notifier?: InboxAlertNotifier,
 ) {
   return runGovernedJob({
     repository,
@@ -47,6 +49,23 @@ export function runInboxTriageJob(
     inputSummary: "Scheduled inbox triage",
     reason: "Review inbox metadata and identify messages requiring attention",
     neededTools: ["gmail.messages.search"],
-    execute: (context) => runInboxTriage(context, reader),
+    execute: async (context) => {
+      const report = await runInboxTriage(context, reader);
+      const configuredNotifier = notifier ?? (process.env.INBOX_ALERT_WEBHOOK_URL ? (messages: Parameters<InboxAlertNotifier>[0]) => postInboxAlert(messages) : undefined);
+      const alertDelivery = await notifyHighPriorityMessages(report.messages, configuredNotifier);
+      await repository.recordAuditEvent({
+        runId: context.runId,
+        agentName: "inbox_triage_agent",
+        eventType: "inbox.alerts.evaluated",
+        outcome: "succeeded",
+        metadata: {
+          highPriorityCount: report.messages.filter((message) => message.priority === "high").length,
+          sent: alertDelivery.sent,
+          skipped: alertDelivery.skipped,
+          deliveryConfigured: Boolean(configuredNotifier),
+        },
+      });
+      return { ...report, alertDelivery };
+    },
   });
 }
