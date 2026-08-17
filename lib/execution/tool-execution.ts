@@ -1,4 +1,5 @@
 import { evaluateApprovalGate, type RiskLevel } from "./approval-engine";
+import { assertToolPolicy } from "./policy-registry";
 import type { ExecutionRepository } from "./repository";
 
 export type ToolCapability = "read" | "draft" | "prepare" | "execute";
@@ -39,6 +40,7 @@ export type ToolSuccess<Output> = {
 };
 
 export function defineTool<Input, Output>(definition: ToolDefinition<Input, Output>) {
+  assertToolPolicy(definition);
   return definition;
 }
 
