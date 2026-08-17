@@ -37,7 +37,7 @@ describe("founder approvals UI contract", () => {
   });
 
   it("includes responsive detail styling and non-color status treatments", () => {
-    const css = read("app/globals.css");
+    const css = read("app/approvals/approvals.css");
     expect(css).toContain(".status-badge.expired");
     expect(css).toContain(".status-badge.consumed");
     expect(css).toContain(".approval-detail");
