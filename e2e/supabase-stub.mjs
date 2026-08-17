@@ -40,6 +40,18 @@ const records = {
       created_at: "2026-08-17T12:00:02.000Z",
     },
   ],
+  tool_calls: [
+    {
+      id: "e2e-tool-1",
+      run_id: "e2e-run-1",
+      agent_name: "product_page_agent",
+      tool_name: "shopify.products.read",
+      capability: "read",
+      risk_level: 1,
+      outcome: "succeeded",
+      created_at: "2026-08-17T12:00:01.000Z",
+    },
+  ],
   approval_requests: [],
 };
 

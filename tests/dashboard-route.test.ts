@@ -49,3 +49,32 @@ describe("GET /api/dashboard", () => {
     });
   });
 });
+
+
+test("returns payload-safe operational metrics and alert summaries", async () => {
+  const run = await repository.createAgentRun({
+    agentName: "shopify_ops_agent",
+    provider: "system",
+    model: "governed-tool-runner",
+    routeAgent: "shopify_ops_agent",
+    riskLevel: 1,
+  });
+  await repository.completeAgentRun({ runId: run.id, status: "failed", errorCode: "scheduled_job_failed" });
+  for (let index = 0; index < 5; index += 1) {
+    await repository.recordAuditEvent({
+      runId: run.id,
+      eventType: "tool.execution",
+      outcome: "blocked",
+      metadata: { sensitivePayload: "must-not-leak" },
+    });
+  }
+
+  const response = await GET();
+  const data = await response.json();
+
+  expect(data.operationalHealth).toMatchObject({
+    metrics: { failedRuns: 1, blockedEvents: 5 },
+    alerts: [expect.objectContaining({ key: "repeated_blocks", severity: "warning" })],
+  });
+  expect(JSON.stringify(data.operationalHealth)).not.toContain("must-not-leak");
+});

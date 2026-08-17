@@ -174,3 +174,32 @@ test("prevents concurrent workers from executing the same leased job", async () 
   expect(first.duplicate).toBe(false);
   expect(executions).toBe(1);
 });
+
+
+test("propagates a scheduled correlation ID across run, routing, and audit records", async () => {
+  const repository = createInMemoryExecutionRepository({ idFactory: () => "correlation-run-1" });
+
+  await runScheduledJob(repository, {
+    idempotencyKey: "daily-audit:2026-08-17",
+    agentName: "shopify_ops_agent",
+    provider: "system",
+    model: "governed-tool-runner",
+    routeAgent: "shopify_ops_agent",
+    riskLevel: 1,
+    inputSummary: "Daily audit.",
+    reason: "Scheduled audit.",
+    neededTools: ["shopify.products.read"],
+    execute: async () => ({ ok: true }),
+    summarize: () => "Completed.",
+  });
+
+  await expect(repository.listAgentRuns()).resolves.toMatchObject([
+    { correlationId: "daily-audit:2026-08-17" },
+  ]);
+  await expect(repository.listRoutingDecisions()).resolves.toMatchObject([
+    { correlationId: "daily-audit:2026-08-17" },
+  ]);
+  await expect(repository.listAuditEvents()).resolves.toMatchObject([
+    { correlationId: "daily-audit:2026-08-17" },
+  ]);
+});

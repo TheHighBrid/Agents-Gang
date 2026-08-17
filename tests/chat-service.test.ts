@@ -169,3 +169,38 @@ test("records a failed run when the specialist provider call fails", async () =>
     },
   ]);
 });
+
+
+test("propagates a supplied correlation ID across chat execution records", async () => {
+  const repository = createInMemoryExecutionRepository({
+    idFactory: (() => {
+      let index = 0;
+      return () => `correlation-record-${++index}`;
+    })(),
+    clock: () => new Date("2026-08-17T12:00:00.000Z"),
+  });
+
+  await runChat({
+    message: "Audit this product page",
+    provider: createProvider([validRoute(), "Audit complete."]),
+    loadMemory: () => "brand memory",
+    repository,
+    correlationId: "corr-20260817-001",
+  });
+
+  await expect(repository.listAgentRuns()).resolves.toMatchObject([
+    { correlationId: "corr-20260817-001" },
+  ]);
+  await expect(repository.listRoutingDecisions()).resolves.toMatchObject([
+    { correlationId: "corr-20260817-001" },
+  ]);
+  await expect(repository.listAuditEvents()).resolves.toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        correlationId: "corr-20260817-001",
+        eventType: "agent.run.completed",
+        outcome: "succeeded",
+      }),
+    ]),
+  );
+});

@@ -64,6 +64,7 @@ export type AgentRunRecord = {
   errorCode?: string;
   durationMs?: number;
   idempotencyKey?: string;
+  correlationId?: string;
 };
 
 export type CreateAgentRunInput = Omit<
@@ -87,6 +88,7 @@ export type RoutingDecisionRecord = {
   reason: string;
   neededTools: string[];
   approvalRequired: boolean;
+  correlationId?: string;
   createdAt: string;
 };
 
@@ -99,6 +101,7 @@ export type AuditEventRecord = {
   toolName?: string;
   riskLevel?: RiskLevel;
   approvalId?: string;
+  correlationId?: string;
   eventType: string;
   outcome: "blocked" | "succeeded" | "failed";
   metadata: Record<string, string | number | boolean | null>;
@@ -115,6 +118,7 @@ export type ToolCallRecord = {
   capability: "read" | "draft" | "prepare" | "execute";
   riskLevel: RiskLevel;
   approvalId?: string;
+  correlationId?: string;
   outcome: "blocked" | "succeeded" | "failed";
   errorCode?: string;
   createdAt: string;

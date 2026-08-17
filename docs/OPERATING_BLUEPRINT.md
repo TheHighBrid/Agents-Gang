@@ -12,7 +12,9 @@ Agents-Gang is a governed execution system. External work must flow through a na
 | Browser and Supabase integration tests | Implemented and passing locally | `e2e/`, `playwright.config.ts` |
 | Governed scheduled jobs | Implemented for product scan, daily audit, inbox triage, and trend radar | `jobs/`, `tools/` |
 | Idempotency and worker leases | Implemented locally; migration and RPC definitions included | `jobs/scheduledJobRunner.ts`, `db/migrations/20260815_governed_execution_up.sql` |
-| Production Shopify boundary | Next implementation target | `tools/shopifyProducts.ts` |
+| Production Shopify boundary | Implemented locally; review pending | `tools/shopify.ts`, `tests/shopify-products-tool.test.ts` |
+| Correlation and operational alerts | Implemented locally; review pending | `lib/observability/operational-health.ts`, `docs/OBSERVABILITY_RUNBOOK.md` |
+| Protected operator controls | Implemented locally; review pending | `app/api/jobs/route.ts`, `lib/scheduler/manual-job-controls.ts`, `docs/OPERATOR_CONTROL_RUNBOOK.md` |
 
 ## Non-negotiable execution rules
 
@@ -21,4 +23,6 @@ Agents-Gang is a governed execution system. External work must flow through a na
 3. Risk level 3 or 4 actions require durable approval validation before execution.
 4. Scheduled jobs acquire a durable lease, use an idempotency key, persist lifecycle transitions, and release the lease on every terminal path.
 5. Logs, dashboards, and audit records contain summaries and safe metadata only; credentials, raw prompts, and protected payloads are excluded.
-6. Every task is implemented behavior-first, verified with the repository’s lint, typecheck, unit, end-to-end, and build checks, and left reviewable on a dedicated branch.
+6. Operational health summaries expose safe counts and alert states only; response procedures and escalation owners are documented in `docs/OBSERVABILITY_RUNBOOK.md`.
+7. Manual scheduler controls are fail-closed, require an operator role and server credential, accept only eligible jobs, and preserve idempotency, retry budgets, and audit trails.
+8. Every task is implemented behavior-first, verified with the repository’s lint, typecheck, unit, end-to-end, and build checks, and left reviewable on a dedicated branch.

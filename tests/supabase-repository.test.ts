@@ -308,3 +308,74 @@ test("acquires and releases a distributed job lease through Supabase RPCs", asyn
   expect(requests[1].url).toBe("https://project.supabase.co/rest/v1/rpc/release_job_lease");
   expect(released).toBe(true);
 });
+
+
+test("persists correlation IDs across runs, decisions, audit events, and tool calls", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const row = {
+    id: "correlation-record-1",
+    run_id: "run-1",
+    agent_name: "product_page_agent",
+    tool_name: "shopify.products.read",
+    risk_level: 1,
+    approval_id: null,
+    event_type: "agent.run.completed",
+    outcome: "succeeded",
+    metadata: {},
+    created_at: "2026-08-17T12:00:00.000Z",
+    correlation_id: "corr-001",
+  };
+  const repository = createSupabaseExecutionRepository({
+    url: "https://project.supabase.co",
+    serviceRoleKey: "service-role-secret",
+    request: async (url, init) => {
+      requests.push({ url: String(url), init });
+      if (String(url).endsWith("/agent_runs")) {
+        return new Response(JSON.stringify([{
+          id: "run-1",
+          agent_name: "product_page_agent",
+          provider: "anthropic",
+          model: "claude-test",
+          route_agent: "product_page_agent",
+          risk_level: 1,
+          status: "running",
+          created_at: "2026-08-17T12:00:00.000Z",
+          correlation_id: "corr-001",
+        }]), { status: 201 });
+      }
+      if (String(url).endsWith("/routing_decisions")) {
+        return new Response(JSON.stringify([{
+          id: "decision-1",
+          run_id: "run-1",
+          selected_agent: "product_page_agent",
+          risk_level: 1,
+          reason: "Product audit.",
+          needed_tools: [],
+          approval_required: false,
+          created_at: "2026-08-17T12:00:00.000Z",
+          correlation_id: "corr-001",
+        }]), { status: 201 });
+      }
+      return new Response(JSON.stringify([row]), { status: 201 });
+    },
+  });
+
+  const run = await repository.createAgentRun({
+    agentName: "product_page_agent", provider: "anthropic", model: "claude-test",
+    routeAgent: "product_page_agent", riskLevel: 1, correlationId: "corr-001",
+  });
+  await repository.recordRoutingDecision({
+    runId: "run-1", selectedAgent: "product_page_agent", riskLevel: 1,
+    reason: "Product audit.", neededTools: [], approvalRequired: false, correlationId: "corr-001",
+  });
+  const event = await repository.recordAuditEvent({
+    runId: "run-1", agentName: "product_page_agent", eventType: "agent.run.completed",
+    outcome: "succeeded", metadata: {}, correlationId: "corr-001",
+  });
+
+  expect(JSON.parse(requests[0].init?.body as string)).toMatchObject({ correlation_id: "corr-001" });
+  expect(JSON.parse(requests[1].init?.body as string)).toMatchObject({ correlation_id: "corr-001" });
+  expect(JSON.parse(requests[2].init?.body as string)).toMatchObject({ correlation_id: "corr-001" });
+  expect(run.correlationId).toBe("corr-001");
+  expect(event.correlationId).toBe("corr-001");
+});

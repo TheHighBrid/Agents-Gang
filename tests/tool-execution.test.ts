@@ -202,3 +202,29 @@ test("records a tool failure as an audit event", async () => {
     },
   ]);
 });
+
+
+test("propagates correlation IDs through tool calls and audit events", async () => {
+  const repository = createInMemoryExecutionRepository();
+  const readTool = defineTool({
+    name: "shopify.products.read",
+    capability: "read" as const,
+    riskLevel: 1 as const,
+    parseInput: () => ({}),
+    async execute() { return { products: [] }; },
+  });
+
+  await executeTool({
+    repository,
+    runId: "run-1",
+    agentName: "shopify_ops_agent",
+    correlationId: "corr-tool-001",
+  }, readTool, {});
+
+  await expect(repository.listToolCalls()).resolves.toMatchObject([
+    { correlationId: "corr-tool-001" },
+  ]);
+  await expect(repository.listAuditEvents()).resolves.toMatchObject([
+    { correlationId: "corr-tool-001" },
+  ]);
+});

@@ -12,7 +12,7 @@ Status values mean **Complete locally** when code and tests exist in the current
 | C3-04 | Provenance and web-search adapter | Complete locally for read path | `web.search` is governed with injected readers and bounded queries. |
 | C3-05 | Route scheduled jobs through common execution contract | Complete locally | All four scheduled jobs use the shared runner. |
 | C4-01 | Durable scheduler, idempotency, and worker leases | Complete locally | In-memory and Supabase lease paths, expiry, contention, and release are covered. |
-| C4-02 | Protected manual trigger and retry controls | Open | Depends on operator authorization and scheduler API surface. |
-| C4-03 | Correlation, metrics, and alert policy | **Next** | Add correlation IDs, payload-safe metrics, alert thresholds, and operational runbook updates. |
-| C4-04 | Job health and healing controls | Open | Depends on C4-02 and C4-03. |
+| C4-02 | Protected manual trigger and retry controls | Complete locally | Protected `POST /api/jobs` contract includes fail-closed operator authorization, a narrow eligible registry, durable duplicate suppression, retry eligibility and budgets, safe audit events, and an operator runbook. |
+| C4-03 | Correlation, metrics, and alert policy | Complete locally | Correlation IDs span API, runs, routing, tools, audits, and logs; payload-safe dashboard metrics, alert thresholds, and recovery guidance are included. |
+| C4-04 | Job health and healing controls | **Next** | Add protected recovery actions and dashboard health controls using C4-02 authorization and C4-03 metrics. |
 | C5 | Production hardening and go/no-go | Open | Requires deployment, soak, CI/CD, and staging evidence. |

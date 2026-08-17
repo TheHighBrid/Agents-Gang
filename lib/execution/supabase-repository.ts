@@ -56,6 +56,7 @@ type SupabaseAgentRunRow = {
   error_code?: string | null;
   duration_ms?: number | null;
   idempotency_key?: string | null;
+  correlation_id?: string | null;
 };
 
 type SupabaseRoutingDecisionRow = {
@@ -66,6 +67,7 @@ type SupabaseRoutingDecisionRow = {
   reason: string;
   needed_tools: string[];
   approval_required: boolean;
+  correlation_id?: string | null;
   created_at: string;
 };
 
@@ -76,6 +78,7 @@ type SupabaseAuditEventRow = {
   tool_name?: string | null;
   risk_level?: AuditEventRecord["riskLevel"] | null;
   approval_id?: string | null;
+  correlation_id?: string | null;
   event_type: string;
   outcome: AuditEventRecord["outcome"];
   metadata: AuditEventRecord["metadata"];
@@ -90,6 +93,7 @@ type SupabaseToolCallRow = {
   capability: ToolCallRecord["capability"];
   risk_level: ToolCallRecord["riskLevel"];
   approval_id?: string | null;
+  correlation_id?: string | null;
   outcome: ToolCallRecord["outcome"];
   error_code?: string | null;
   created_at: string;
@@ -144,6 +148,7 @@ function toAgentRunRecord(row: SupabaseAgentRunRow): AgentRunRecord {
     errorCode: row.error_code ?? undefined,
     durationMs: row.duration_ms ?? undefined,
     idempotencyKey: row.idempotency_key ?? undefined,
+    correlationId: row.correlation_id ?? undefined,
   };
 }
 
@@ -156,6 +161,7 @@ function toRoutingDecisionRecord(row: SupabaseRoutingDecisionRow): RoutingDecisi
     reason: row.reason,
     neededTools: row.needed_tools,
     approvalRequired: row.approval_required,
+    correlationId: row.correlation_id ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -168,6 +174,7 @@ function toAuditEventRecord(row: SupabaseAuditEventRow): AuditEventRecord {
     toolName: row.tool_name ?? undefined,
     riskLevel: row.risk_level ?? undefined,
     approvalId: row.approval_id ?? undefined,
+    correlationId: row.correlation_id ?? undefined,
     eventType: row.event_type,
     outcome: row.outcome,
     metadata: row.metadata,
@@ -184,6 +191,7 @@ function toToolCallRecord(row: SupabaseToolCallRow): ToolCallRecord {
     capability: row.capability,
     riskLevel: row.risk_level,
     approvalId: row.approval_id ?? undefined,
+    correlationId: row.correlation_id ?? undefined,
     outcome: row.outcome,
     errorCode: row.error_code ?? undefined,
     createdAt: row.created_at,
@@ -293,6 +301,7 @@ export function createSupabaseExecutionRepository({
           risk_level: input.riskLevel,
           input_summary: input.inputSummary,
           idempotency_key: input.idempotencyKey,
+          correlation_id: input.correlationId,
         }),
       });
       if (rows.length !== 1) {
@@ -365,6 +374,7 @@ export function createSupabaseExecutionRepository({
           reason: input.reason,
           needed_tools: input.neededTools,
           approval_required: input.approvalRequired,
+          correlation_id: input.correlationId,
         }),
       });
       if (rows.length !== 1) {
@@ -383,6 +393,7 @@ export function createSupabaseExecutionRepository({
           tool_name: input.toolName,
           risk_level: input.riskLevel,
           approval_id: input.approvalId,
+          correlation_id: input.correlationId,
           event_type: input.eventType,
           outcome: input.outcome,
           metadata: input.metadata,
@@ -405,6 +416,7 @@ export function createSupabaseExecutionRepository({
           capability: input.capability,
           risk_level: input.riskLevel,
           approval_id: input.approvalId,
+          correlation_id: input.correlationId,
           outcome: input.outcome,
           error_code: input.errorCode,
         }),

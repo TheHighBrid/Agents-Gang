@@ -1,6 +1,7 @@
 export type StructuredLogEvent = {
   event: string;
   runId?: string;
+  correlationId?: string;
   agent?: string;
   route?: string;
   provider?: string;

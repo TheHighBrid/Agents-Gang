@@ -6,9 +6,11 @@ import { runScheduledJob } from "./scheduledJobRunner";
 export function runDailyMelatoAudit(
   repository: ExecutionRepository,
   reader?: ShopifyProductsReader,
+  controls?: { idempotencyKey?: string; correlationId?: string },
 ) {
   return runScheduledJob(repository, {
-    idempotencyKey: "daily-melato-audit",
+    idempotencyKey: controls?.idempotencyKey ?? "daily-melato-audit",
+    correlationId: controls?.correlationId,
     agentName: "shopify_ops_agent",
     provider: "system",
     model: "governed-tool-runner",
@@ -17,9 +19,9 @@ export function runDailyMelatoAudit(
     inputSummary: "Daily Melato store-health audit.",
     reason: "The daily schedule requested a governed Shopify store-health audit.",
     neededTools: ["shopify.products.read"],
-    execute: async ({ runId }) => {
+    execute: async ({ runId, correlationId }) => {
       const result = await runProductPageScan(
-        { repository, runId, agentName: "shopify_ops_agent" },
+        { repository, runId, agentName: "shopify_ops_agent", correlationId },
         reader,
       );
       if (!result.ok) {

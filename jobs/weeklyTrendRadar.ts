@@ -16,9 +16,9 @@ export function runWeeklyTrendRadar<Result>(
     inputSummary: "Weekly trend radar.",
     reason: "The weekly schedule requested a read-only trend research pass.",
     neededTools: ["web.search"],
-    execute: async ({ runId }) => {
+    execute: async ({ runId, correlationId }) => {
       const result = await runWebSearch(
-        { repository, runId, agentName: "trend_radar_agent" },
+        { repository, runId, agentName: "trend_radar_agent", correlationId },
         "Melato ecommerce product and customer trends this week",
         reader,
       );

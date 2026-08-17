@@ -89,11 +89,13 @@ export async function runChat({
   provider,
   loadMemory,
   repository,
+  correlationId,
 }: {
   message: string;
   provider: AIProvider;
   loadMemory: () => string;
   repository?: ExecutionRepository;
+  correlationId?: string;
 }): Promise<{
   route: RoutePlan;
   output: string;
@@ -119,6 +121,7 @@ export async function runChat({
     routeAgent: route.agent,
     riskLevel: route.risk_level,
     inputSummary: `Chat request received (${message.length} characters).`,
+    correlationId,
   });
   if (run) {
     await repository?.recordRoutingDecision({
@@ -128,6 +131,7 @@ export async function runChat({
       reason: route.reason,
       neededTools: route.needed_tools,
       approvalRequired: route.approval_required,
+      correlationId,
     });
   }
 
@@ -148,6 +152,14 @@ export async function runChat({
         outputSummary: `Specialist response completed (${specialistResponse.text.length} characters).`,
         durationMs: Date.now() - startedAt,
       });
+      await repository?.recordAuditEvent({
+        runId: run.id,
+        agentName: route.agent,
+        correlationId,
+        eventType: "agent.run.completed",
+        outcome: "succeeded",
+        metadata: { durationMs: Date.now() - startedAt },
+      });
     }
 
     return {
@@ -163,6 +175,14 @@ export async function runChat({
         status: "failed",
         errorCode: "chat_execution_failed",
         durationMs: Date.now() - startedAt,
+      });
+      await repository?.recordAuditEvent({
+        runId: run.id,
+        agentName: route.agent,
+        correlationId,
+        eventType: "agent.run.failed",
+        outcome: "failed",
+        metadata: { errorCode: "chat_execution_failed" },
       });
     }
     throw error;

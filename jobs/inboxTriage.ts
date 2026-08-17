@@ -16,9 +16,9 @@ export function runInboxTriage<Result>(
     inputSummary: "Scheduled inbox triage.",
     reason: "The scheduled inbox workflow requested a read-only Gmail triage pass.",
     neededTools: ["gmail.search"],
-    execute: async ({ runId }) => {
+    execute: async ({ runId, correlationId }) => {
       const result = await runGmailSearch(
-        { repository, runId, agentName: "concierge_agent" },
+        { repository, runId, agentName: "concierge_agent", correlationId },
         "is:unread newer_than:7d",
         reader,
       );

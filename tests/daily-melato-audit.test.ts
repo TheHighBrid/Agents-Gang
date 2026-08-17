@@ -35,3 +35,18 @@ describe("daily Melato audit job", () => {
     ]);
   });
 });
+
+
+test("uses protected-control idempotency and correlation values for a manual audit", async () => {
+  const repository = createInMemoryExecutionRepository({ idFactory: () => "manual-daily-run-1" });
+
+  await runDailyMelatoAudit(
+    repository,
+    async () => ({ products: [] }),
+    { idempotencyKey: "manual:daily-audit:100", correlationId: "control-manual-100" },
+  );
+
+  await expect(repository.listAgentRuns()).resolves.toMatchObject([
+    { idempotencyKey: "manual:daily-audit:100", correlationId: "control-manual-100" },
+  ]);
+});

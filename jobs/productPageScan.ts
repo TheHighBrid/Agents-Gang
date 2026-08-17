@@ -24,9 +24,9 @@ export function runScheduledProductPageScan(
     inputSummary: "Scheduled product-page scan.",
     reason: "The daily schedule requested a governed Shopify product-page scan.",
     neededTools: ["shopify.products.read"],
-    execute: async ({ runId }) => {
+    execute: async ({ runId, correlationId }) => {
       const result = await runProductPageScan(
-        { repository, runId, agentName: "product_page_agent" },
+        { repository, runId, agentName: "product_page_agent", correlationId },
         reader,
       );
       if (!result.ok) {

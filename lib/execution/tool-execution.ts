@@ -17,6 +17,7 @@ export type ToolExecutionContext = {
   runId: string;
   agentName: string;
   approvalId?: string;
+  correlationId?: string;
 };
 
 export type ToolFailure = {
@@ -64,6 +65,7 @@ export async function executeTool<Input, Output>(
       capability: tool.capability,
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
+      correlationId: context.correlationId,
       outcome: "blocked",
       errorCode: gate.reason,
     });
@@ -73,6 +75,7 @@ export async function executeTool<Input, Output>(
       toolName: tool.name,
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
+      correlationId: context.correlationId,
       eventType: "tool.execution",
       outcome: "blocked",
       metadata: { errorCode: gate.reason },
@@ -99,6 +102,7 @@ export async function executeTool<Input, Output>(
       capability: tool.capability,
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
+      correlationId: context.correlationId,
       outcome: "failed",
       errorCode: "invalid_input",
     });
@@ -121,6 +125,7 @@ export async function executeTool<Input, Output>(
       capability: tool.capability,
       riskLevel: tool.riskLevel,
       approvalId: matchingApproval.id,
+      correlationId: context.correlationId,
       outcome: "blocked",
       errorCode: "approval_required",
     });
@@ -143,6 +148,7 @@ export async function executeTool<Input, Output>(
       capability: tool.capability,
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
+      correlationId: context.correlationId,
       outcome: "succeeded",
     });
     await context.repository.recordAuditEvent({
@@ -151,6 +157,7 @@ export async function executeTool<Input, Output>(
       toolName: tool.name,
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
+      correlationId: context.correlationId,
       eventType: "tool.execution",
       outcome: "succeeded",
       metadata: {},
@@ -165,6 +172,7 @@ export async function executeTool<Input, Output>(
       capability: tool.capability,
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
+      correlationId: context.correlationId,
       outcome: "failed",
       errorCode: "tool_execution_failed",
     });
@@ -174,6 +182,7 @@ export async function executeTool<Input, Output>(
       toolName: tool.name,
       riskLevel: tool.riskLevel,
       approvalId: context.approvalId,
+      correlationId: context.correlationId,
       eventType: "tool.execution",
       outcome: "failed",
       metadata: { errorCode: "tool_execution_failed" },

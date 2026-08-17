@@ -148,3 +148,20 @@ as $$
 $$;
 
 commit;
+
+
+alter table agent_runs
+  add column if not exists correlation_id text;
+alter table routing_decisions
+  add column if not exists correlation_id text;
+alter table audit_events
+  add column if not exists correlation_id text;
+alter table tool_calls
+  add column if not exists correlation_id text;
+
+create index if not exists agent_runs_correlation_id_idx on agent_runs (correlation_id);
+create index if not exists routing_decisions_correlation_id_idx on routing_decisions (correlation_id);
+create index if not exists audit_events_correlation_id_idx on audit_events (correlation_id, created_at desc);
+create index if not exists tool_calls_correlation_id_idx on tool_calls (correlation_id, created_at desc);
+
+commit;

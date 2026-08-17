@@ -7,6 +7,7 @@ export type ScheduledJobDefinition<Result> = {
   idempotencyKey?: string;
   leaseDurationMs?: number;
   ownerId?: string;
+  correlationId?: string;
   retryClass?: "transient" | "permanent";
   agentName: string;
   provider: string;
@@ -16,7 +17,7 @@ export type ScheduledJobDefinition<Result> = {
   inputSummary: string;
   reason: string;
   neededTools: string[];
-  execute: (context: { runId: string }) => Promise<Result>;
+  execute: (context: { runId: string; correlationId: string }) => Promise<Result>;
   summarize: (result: Result) => string;
 };
 
@@ -36,6 +37,7 @@ export async function runScheduledJob<Result>(
     ? `scheduled-job:${definition.idempotencyKey}`
     : `scheduled-job:${definition.agentName}`;
   const ownerId = definition.ownerId ?? DEFAULT_OWNER_ID;
+  const correlationId = definition.correlationId ?? definition.idempotencyKey ?? leaseKey;
   const lease = await repository.acquireJobLease({
     leaseKey,
     ownerId,
@@ -44,6 +46,7 @@ export async function runScheduledJob<Result>(
   if (!lease) {
     await repository.recordAuditEvent({
       agentName: definition.agentName,
+      correlationId,
       eventType: "scheduled_job.lease_contended",
       outcome: "blocked",
       metadata: { leaseKey },
@@ -56,6 +59,7 @@ export async function runScheduledJob<Result>(
       await repository.recordAuditEvent({
         runId: existingRun.id,
         agentName: definition.agentName,
+        correlationId,
         eventType: "scheduled_job.duplicate",
         outcome: "blocked",
         metadata: { idempotencyKey: definition.idempotencyKey },
@@ -72,6 +76,7 @@ export async function runScheduledJob<Result>(
     riskLevel: definition.riskLevel,
     inputSummary: definition.inputSummary,
     idempotencyKey: definition.idempotencyKey,
+    correlationId,
   });
 
   await repository.recordRoutingDecision({
@@ -81,10 +86,11 @@ export async function runScheduledJob<Result>(
     reason: definition.reason,
     neededTools: definition.neededTools,
     approvalRequired: definition.riskLevel >= 3,
+    correlationId,
   });
 
   try {
-    const data = await definition.execute({ runId: run.id });
+    const data = await definition.execute({ runId: run.id, correlationId });
     await repository.completeAgentRun({
       runId: run.id,
       status: "completed",
@@ -94,6 +100,7 @@ export async function runScheduledJob<Result>(
     await repository.recordAuditEvent({
       runId: run.id,
       agentName: definition.agentName,
+      correlationId,
       eventType: "scheduled_job.completed",
       outcome: "succeeded",
       metadata: { durationMs: Date.now() - startedAt },
@@ -112,6 +119,7 @@ export async function runScheduledJob<Result>(
     await repository.recordAuditEvent({
       runId: run.id,
       agentName: definition.agentName,
+      correlationId,
       eventType: "scheduled_job.failed",
       outcome: "failed",
       metadata: { errorCode, retryClass: definition.retryClass ?? "permanent" },

@@ -42,10 +42,34 @@ type AuditEvent = {
   createdAt: string;
 };
 
+type OperationalAlert = {
+  key: string;
+  severity: "warning" | "critical";
+  count: number;
+  threshold: number;
+  owner: string;
+  message: string;
+};
+
+type OperationalHealth = {
+  metrics: {
+    totalRuns: number;
+    completedRuns: number;
+    failedRuns: number;
+    runningRuns: number;
+    retryableFailedRuns: number;
+    providerTimeouts: number;
+    persistenceTimeouts: number;
+    blockedEvents: number;
+  };
+  alerts: OperationalAlert[];
+};
+
 type DashboardData = {
   runs: AgentRun[];
   routingDecisions: RoutingDecision[];
   auditEvents: AuditEvent[];
+  operationalHealth?: OperationalHealth;
 };
 
 function formatDate(value: string) {
@@ -109,6 +133,23 @@ export default function DashboardPage() {
             <div className="metric-card"><span>Routing decisions</span><strong>{data.routingDecisions.length}</strong></div>
             <div className="metric-card"><span>Audit events</span><strong>{data.auditEvents.length}</strong></div>
             <div className="metric-card"><span>Open runs</span><strong>{data.runs.filter((run) => run.status === "running").length}</strong></div>
+          </section>
+
+          <section className="dashboard-section">
+            <div className="section-heading"><div><p className="eyebrow">Operational health</p><h2>Metrics and alerts</h2></div><span className="muted">Persisted snapshot</span></div>
+            {data.operationalHealth ? (
+              <>
+                <div className="metric-grid" aria-label="Operational health metrics">
+                  <div className="metric-card"><span>Failed runs</span><strong>{data.operationalHealth.metrics.failedRuns}</strong></div>
+                  <div className="metric-card"><span>Retryable failures</span><strong>{data.operationalHealth.metrics.retryableFailedRuns}</strong></div>
+                  <div className="metric-card"><span>Provider timeouts</span><strong>{data.operationalHealth.metrics.providerTimeouts}</strong></div>
+                  <div className="metric-card"><span>Blocked actions</span><strong>{data.operationalHealth.metrics.blockedEvents}</strong></div>
+                </div>
+                {data.operationalHealth.alerts.length === 0 ? <p className="empty-state">No active operational alerts in this snapshot.</p> : (
+                  <div className="record-list">{data.operationalHealth.alerts.map((alert) => <article className="record-row" key={alert.key}><div><strong>{alert.message}</strong><p>{alert.key.replaceAll("_", " ")} · Owner: {alert.owner}</p></div><div className="record-meta"><span className={statusClass(alert.severity === "critical" ? "failed" : "blocked")}>{alert.severity}</span><span>{alert.count} / {alert.threshold}</span></div></article>)}</div>
+                )}
+              </>
+            ) : <p className="empty-state">Operational metrics are unavailable for this response.</p>}
           </section>
 
           <section className="dashboard-section">
