@@ -1,11 +1,20 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
-import { approvalConfirmationText, requiresExplicitApprovalConfirmation } from "../../lib/approvals/decision";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { requiresExplicitApprovalConfirmation } from "../../lib/approvals/decision";
+import {
+  decisionConflictMessage,
+  decisionConfirmationText,
+  decisionSuccessMessage,
+  isDecisionAllowed,
+  type ApprovalDecisionStatus,
+  type ApprovalLifecycleStatus,
+} from "../../lib/approvals/decision-ui";
 
-type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "consumed";
+type ApprovalStatus = ApprovalLifecycleStatus;
 type ApprovalFilter = ApprovalStatus | "all";
-type DecisionStatus = Extract<ApprovalStatus, "approved" | "rejected">;
+type DecisionStatus = ApprovalDecisionStatus;
+type DecisionProgressState = "submitting" | "success" | "conflict" | "error";
 
 type Approval = {
   id: string;
@@ -33,6 +42,12 @@ type ApprovalDetailResponse = {
   error?: string;
 };
 
+type DecisionProgress = {
+  approvalId: string;
+  state: DecisionProgressState;
+  message: string;
+};
+
 const statusLabels: Record<ApprovalFilter, string> = {
   all: "All requests",
   pending: "Needs review",
@@ -54,6 +69,7 @@ export default function ApprovalsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
+  const [decisionProgress, setDecisionProgress] = useState<DecisionProgress | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
 
   async function loadApprovals(
@@ -61,6 +77,7 @@ export default function ApprovalsPage() {
     requestedFilter: ApprovalFilter = filter,
     cursor?: string,
     append = false,
+    preserveSelection = false,
   ) {
     event?.preventDefault();
     const session = token.trim();
@@ -86,7 +103,10 @@ export default function ApprovalsPage() {
       const incoming = body.approvals ?? [];
       setApprovals((current) => append ? [...current, ...incoming] : incoming);
       setNextCursor(body.nextCursor ?? null);
-      if (!append) setSelectedApproval(null);
+      if (!append && !preserveSelection) {
+        setSelectedApproval(null);
+        setDecisionProgress(null);
+      }
       setMessage(`${incoming.length} ${statusLabels[requestedFilter].toLowerCase()} loaded${body.nextCursor ? ". More are available." : "."}`);
     } catch (loadError) {
       const text = loadError instanceof Error ? loadError.message : "Unable to load approvals";
@@ -101,6 +121,7 @@ export default function ApprovalsPage() {
   async function changeFilter(status: ApprovalFilter) {
     setFilter(status);
     setNextCursor(null);
+    setDecisionProgress(null);
     if (token.trim()) await loadApprovals(undefined, status);
   }
 
@@ -114,14 +135,8 @@ export default function ApprovalsPage() {
     setDetailLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${session}` },
-        cache: "no-store",
-      });
-      const body = await response.json() as ApprovalDetailResponse;
-      if (!response.ok || !body.approval) throw new Error(body.error ?? "Unable to load approval detail");
-      setSelectedApproval(body.approval);
+      const approval = await fetchPersistedApproval(approvalId, session);
+      setSelectedApproval(approval);
       requestAnimationFrame(() => detailHeadingRef.current?.focus());
     } catch (detailError) {
       setError(detailError instanceof Error ? detailError.message : "Unable to load approval detail");
@@ -131,38 +146,81 @@ export default function ApprovalsPage() {
   }
 
   async function decide(approvalId: string, status: DecisionStatus, result: string) {
+    const session = token.trim();
+    if (!session) {
+      const text = "A signed founder session is required before a decision can be submitted.";
+      setError(text);
+      setDecisionProgress({ approvalId, state: "error", message: text });
+      return;
+    }
     if (!result.trim()) {
-      setError("Add a short decision note before submitting.");
+      const text = "Add a short decision note before submitting.";
+      setError(text);
+      setDecisionProgress({ approvalId, state: "error", message: text });
       return;
     }
 
-    setLoading(true);
+    const submittingMessage = status === "approved"
+      ? "Submitting approval to the protected server..."
+      : "Submitting rejection to the protected server...";
+    setDecisionProgress({ approvalId, state: "submitting", message: submittingMessage });
+    setMessage(submittingMessage);
     setError(null);
+
     try {
       const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${token.trim()}`,
+          Authorization: `Bearer ${session}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ status, result }),
+        body: JSON.stringify({ status, result: result.trim() }),
       });
       const body = await response.json() as ApprovalDetailResponse;
+
       if (response.status === 409) {
-        setMessage("No action was taken because this request changed. Refreshing the persisted queue...");
-        await loadApprovals(undefined, filter);
-        setMessage("No action was taken. The queue now reflects the latest persisted state.");
+        const refreshing = "The protected server blocked this stale decision. Refreshing persisted state...";
+        setDecisionProgress({ approvalId, state: "conflict", message: refreshing });
+        setMessage(refreshing);
+
+        let latest: Approval | null = null;
+        try {
+          latest = await fetchPersistedApproval(approvalId, session);
+        } catch {
+          latest = null;
+        }
+        await loadApprovals(undefined, filter, undefined, false, true);
+
+        if (latest) {
+          const conflictMessage = decisionConflictMessage(latest.status);
+          setSelectedApproval(latest);
+          setDecisionProgress({ approvalId, state: "conflict", message: conflictMessage });
+          setMessage(conflictMessage);
+          requestAnimationFrame(() => detailHeadingRef.current?.focus());
+        } else {
+          const conflictMessage = "No action was taken. The protected server reported a conflict and the queue was refreshed, but the latest request detail could not be loaded.";
+          setDecisionProgress({ approvalId, state: "conflict", message: conflictMessage });
+          setMessage(conflictMessage);
+        }
         return;
       }
-      if (!response.ok || !body.approval) throw new Error(body.error ?? "Unable to save decision");
 
-      setApprovals((current) => current.map((item) => item.id === body.approval?.id ? body.approval : item));
+      if (!response.ok || !body.approval) {
+        throw new Error(body.error ?? "Unable to save decision");
+      }
+
+      await loadApprovals(undefined, filter, undefined, false, true);
       setSelectedApproval(body.approval);
-      setMessage(`Request ${status}.`);
+      const successMessage = decisionSuccessMessage(status);
+      setDecisionProgress({ approvalId, state: "success", message: successMessage });
+      setMessage(successMessage);
+      requestAnimationFrame(() => detailHeadingRef.current?.focus());
     } catch (decisionError) {
-      setError(decisionError instanceof Error ? decisionError.message : "Unable to save decision");
-    } finally {
-      setLoading(false);
+      const reason = decisionError instanceof Error ? decisionError.message : "Unable to save decision";
+      const text = `No decision state was assumed because the protected API did not confirm the change. ${reason}`;
+      setError(text);
+      setDecisionProgress({ approvalId, state: "error", message: text });
+      setMessage("Decision was not confirmed by the protected server.");
     }
   }
 
@@ -245,6 +303,7 @@ export default function ApprovalsPage() {
                   approval={approval}
                   loading={loading}
                   selected={selectedApproval?.id === approval.id}
+                  decisionProgress={decisionProgress?.approvalId === approval.id ? decisionProgress : null}
                   onView={loadDetail}
                   onDecide={decide}
                 />
@@ -286,25 +345,40 @@ function ApprovalCard({
   approval,
   loading,
   selected,
+  decisionProgress,
   onView,
   onDecide,
 }: {
   approval: Approval;
   loading: boolean;
   selected: boolean;
+  decisionProgress: DecisionProgress | null;
   onView: (id: string) => Promise<void>;
   onDecide: (id: string, status: DecisionStatus, result: string) => Promise<void>;
 }) {
   const [note, setNote] = useState("");
   const [confirming, setConfirming] = useState<DecisionStatus | null>(null);
-  const isPending = approval.status === "pending";
+  const confirmationRef = useRef<HTMLDivElement>(null);
+  const decisionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const isPending = isDecisionAllowed(approval.status);
+  const decisionBusy = decisionProgress?.state === "submitting";
 
-  function requestDecision(status: DecisionStatus) {
+  useEffect(() => {
+    if (confirming) requestAnimationFrame(() => confirmationRef.current?.focus());
+  }, [confirming]);
+
+  function requestDecision(status: DecisionStatus, trigger: HTMLButtonElement) {
+    decisionTriggerRef.current = trigger;
     if (requiresExplicitApprovalConfirmation(approval.riskLevel)) {
       setConfirming(status);
       return;
     }
     void onDecide(approval.id, status, note);
+  }
+
+  function closeConfirmation() {
+    setConfirming(null);
+    requestAnimationFrame(() => decisionTriggerRef.current?.focus());
   }
 
   return (
@@ -331,31 +405,89 @@ function ApprovalCard({
       </button>
 
       {approval.result && <p className="decision-note"><strong>Decision note:</strong> {approval.result}</p>}
-      {isPending && (
+      {decisionProgress && (
+        <p
+          className={`decision-state ${decisionProgress.state}`}
+          role={decisionProgress.state === "error" || decisionProgress.state === "conflict" ? "alert" : "status"}
+          aria-live="polite"
+        >
+          {decisionProgress.message}
+        </p>
+      )}
+
+      {isPending ? (
         <div className="decision-panel">
           <label htmlFor={`note-${approval.id}`}>Decision note</label>
           <textarea
             id={`note-${approval.id}`}
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Why is this safe to proceed?"
+            placeholder="Why is this decision appropriate?"
             rows={2}
+            disabled={decisionBusy}
           />
           <div className="decision-actions">
-            <button type="button" className="reject" disabled={loading} onClick={() => requestDecision("rejected")}>Reject</button>
-            <button type="button" className="approve" disabled={loading} onClick={() => requestDecision("approved")}>Approve action</button>
+            <button
+              type="button"
+              className="reject"
+              disabled={loading || decisionBusy}
+              onClick={(event) => requestDecision("rejected", event.currentTarget)}
+            >
+              {decisionBusy ? "Submitting..." : "Reject"}
+            </button>
+            <button
+              type="button"
+              className="approve"
+              disabled={loading || decisionBusy}
+              onClick={(event) => requestDecision("approved", event.currentTarget)}
+            >
+              {decisionBusy ? "Submitting..." : "Approve action"}
+            </button>
           </div>
           {confirming && (
-            <div className="confirmation-panel" role="alertdialog" aria-modal="true" aria-labelledby={`confirm-${approval.id}`}>
-              <p className="confirmation-title" id={`confirm-${approval.id}`}>{approvalConfirmationText(approval)}</p>
-              <p className="confirmation-copy">Risk {approval.riskLevel} requires explicit confirmation. Recheck the action and target before continuing.</p>
+            <div
+              ref={confirmationRef}
+              className="confirmation-panel"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby={`confirm-${approval.id}`}
+              aria-describedby={`confirm-copy-${approval.id}`}
+              tabIndex={-1}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  closeConfirmation();
+                }
+              }}
+            >
+              <p className="confirmation-title" id={`confirm-${approval.id}`}>
+                {decisionConfirmationText(approval, confirming)}
+              </p>
+              <p className="confirmation-copy" id={`confirm-copy-${approval.id}`}>
+                Risk {approval.riskLevel} requires explicit confirmation. The protected server remains authoritative, and no UI state will change unless it accepts this decision.
+              </p>
               <div className="decision-actions">
-                <button type="button" className="reject" disabled={loading} onClick={() => setConfirming(null)}>Cancel</button>
-                <button type="button" className="approve" disabled={loading} onClick={() => { setConfirming(null); void onDecide(approval.id, confirming, note); }}>Confirm {confirming}</button>
+                <button type="button" className="reject" disabled={decisionBusy} onClick={closeConfirmation}>Cancel</button>
+                <button
+                  type="button"
+                  className={confirming === "approved" ? "approve" : "reject"}
+                  disabled={decisionBusy}
+                  onClick={() => {
+                    const decision = confirming;
+                    setConfirming(null);
+                    void onDecide(approval.id, decision, note);
+                  }}
+                >
+                  {confirming === "approved" ? "Confirm approval" : "Confirm rejection"}
+                </button>
               </div>
             </div>
           )}
         </div>
+      ) : (
+        <p className="terminal-decision-note">
+          Decision controls are unavailable because persisted state is {statusLabels[approval.status].toLowerCase()}.
+        </p>
       )}
     </article>
   );
@@ -398,6 +530,17 @@ function ApprovalDetail({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return <div><dt>{label}</dt><dd>{value}</dd></div>;
+}
+
+async function fetchPersistedApproval(approvalId: string, session: string): Promise<Approval> {
+  const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${session}` },
+    cache: "no-store",
+  });
+  const body = await response.json() as ApprovalDetailResponse;
+  if (!response.ok || !body.approval) throw new Error(body.error ?? "Unable to load approval detail");
+  return body.approval;
 }
 
 function buildApprovalListPath(filter: ApprovalFilter, cursor?: string) {
