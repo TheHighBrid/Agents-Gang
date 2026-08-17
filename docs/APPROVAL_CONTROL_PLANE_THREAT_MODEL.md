@@ -9,7 +9,7 @@ The approval API is a server-only founder control plane. Requests cross an untru
 1. Anonymous, malformed, expired, revoked, and non-founder sessions fail closed before storage access.
 2. Lists and details expose a bounded safe DTO, never raw tool arguments, credentials, prompts, or environment values.
 3. Lists have a maximum page size, validated filters, and deterministic `(created_at, id)` descending cursors.
-4. A decision may transition only `pending` to `approved` or `rejected`; server time supplies decision timestamps.
+4. A decision may transition only `pending` to `approved` or `rejected`; server time supplies decision timestamps. Any missing expiry is unbounded by design, while a malformed or elapsed expiry fails closed.
 5. Every well-formed authenticated decision attempt is audited with actor, requested decision, outcome, and a non-sensitive reason.
 6. Execution revalidates action and target, then atomically consumes an `approved` record before the external effect. A consumed approval cannot be replayed.
 7. API errors are stable, generic, and do not serialize thrown errors or persistence responses.
@@ -23,6 +23,7 @@ The approval API is a server-only founder control plane. Requests cross an untru
 | Duplicate decisions or race decision requests | Repository compare-and-set against `pending`; conflict response |
 | Execute twice with one approval | Compare-and-set consumption before effect; replay regression test |
 | Decide after expiry | Decision route rejects expired records; execution gate checks expiry |
+| Supply a malformed expiry timestamp to bypass expiry checks | Shared `isApprovalExpired` parser treats invalid timestamps as expired in both decision and execution paths |
 | Enumerate via unbounded queries | Validated filters, 100-record maximum, opaque cursor |
 | Inject malformed JSON, cursor, dates, or statuses | Parser validation and bounded decision notes |
 | Exfiltrate payloads, tokens, or persistence errors | Safe DTO and generic error taxonomy |

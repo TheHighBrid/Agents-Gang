@@ -1,64 +1,60 @@
 import { describe, expect, test } from "vitest";
 import { defineTool } from "../lib/execution/tool-execution";
 import {
-  ENABLED_JOB_POLICIES,
-  ENABLED_TOOL_POLICIES,
-  assertPolicyRegistryComplete,
+  TOOL_POLICY_REGISTRY,
   getToolPolicy,
-} from "../lib/policy/registry";
+  assertToolPolicy,
+} from "../lib/execution/policy-registry";
 
-describe("capability and risk policy registry", () => {
-  test("covers every enabled tool with typed governance metadata", () => {
-    assertPolicyRegistryComplete();
-    expect(ENABLED_TOOL_POLICIES.length).toBeGreaterThanOrEqual(16);
-
-    for (const policy of ENABLED_TOOL_POLICIES) {
-      expect(policy.name).toBeTruthy();
-      expect(policy.owner).toBeTruthy();
-      expect(["read", "draft", "prepare", "execute"]).toContain(policy.capability);
-      expect([1, 2, 3, 4, 5]).toContain(policy.riskLevel);
-      expect(typeof policy.approvalRequired).toBe("boolean");
-      expect(policy.targetIdentity).toBeTruthy();
-      expect(["none", "read", "draft", "notify", "mutate"]).toContain(policy.externalEffect);
-      expect(["not_applicable", "deterministic_key", "required"]).toContain(policy.idempotency);
-      expect(policy.enabled).toBe(true);
-    }
-  });
-
-  test("covers every enabled scheduled job action and references only registered tools", () => {
-    expect(ENABLED_JOB_POLICIES.map((policy) => policy.name)).toEqual(expect.arrayContaining([
-      "job.daily_melato_audit",
-      "job.product_page_scan",
-      "job.inbox_triage",
-      "job.weekly_trend_radar",
+describe("typed capability and risk policy registry", () => {
+  test("covers every enabled tool action exactly once", () => {
+    const actions = TOOL_POLICY_REGISTRY.map((policy) => policy.actionType);
+    expect(new Set(actions).size).toBe(actions.length);
+    expect(actions).toEqual(expect.arrayContaining([
+      "web.search",
+      "gmail.messages.search",
+      "gmail.draft.create",
+      "gmail.draft.send",
+      "product.image.audit",
+      "inbox.alert.send",
+      "shopify.products.read",
+      "shopify.product.read",
+      "shopify.collections.read",
+      "shopify.customers.read",
+      "shopify.product.create",
+      "shopify.product.update",
+      "shopify.customer.create",
+      "shopify.customer.update",
+      "shopify.inventory.adjust",
+      "shopify.variant.create",
+      "shopify.variant.update",
     ]));
-
-    for (const job of ENABLED_JOB_POLICIES) {
-      expect(job.owner).toBeTruthy();
-      expect(job.externalEffect).toBe("none");
-      expect(job.idempotency).toBe("required");
-      expect(job.enabled).toBe(true);
-      for (const toolName of job.neededTools) {
-        expect(getToolPolicy(toolName)).toBeDefined();
-      }
-    }
   });
 
-  test("rejects registered tool definitions that drift from policy metadata", () => {
+  test("marks reads as risk 1 and mutating or drafting actions as approval-gated risk 3", () => {
+    expect(getToolPolicy("gmail.messages.search")).toMatchObject({ capability: "read", riskLevel: 1, approvalRequired: false });
+    expect(getToolPolicy("gmail.draft.create")).toMatchObject({ capability: "draft", riskLevel: 3, approvalRequired: true, targetBinding: "required" });
+    expect(getToolPolicy("gmail.draft.send")).toMatchObject({ capability: "execute", riskLevel: 4, approvalRequired: true, targetBinding: "required" });
+    expect(getToolPolicy("shopify.product.update")).toMatchObject({ capability: "execute", riskLevel: 3, approvalRequired: true, targetBinding: "required" });
+  });
+
+  test("rejects a tool whose declared governance metadata drifts from policy", () => {
+    expect(() => assertToolPolicy({ name: "gmail.draft.create", capability: "execute", riskLevel: 1 })).toThrow(/policy mismatch/i);
     expect(() => defineTool({
-      name: "shopify.product.update",
-      capability: "read",
+      name: "gmail.draft.create",
+      capability: "execute",
       riskLevel: 1,
-      parseInput: (input: unknown) => input,
-      execute: async (input: unknown) => input,
-    })).toThrow("Tool definition does not match policy registry");
+      parseInput: () => ({}),
+      execute: async () => undefined,
+    })).toThrow(/policy mismatch/i);
   });
 
-  test("keeps high-risk external mutations approval-gated", () => {
-    for (const policy of ENABLED_TOOL_POLICIES) {
-      if (policy.riskLevel >= 3 || policy.externalEffect === "mutate") {
-        expect(policy.approvalRequired, policy.name).toBe(true);
-      }
-    }
+  test("requires target binding for approval-gated actions that mutate an existing target", () => {
+    expect(() => assertToolPolicy({ name: "gmail.draft.create", capability: "draft", riskLevel: 3 })).toThrow(/target binding/i);
+  });
+
+  test("rejects unknown actions instead of silently allowing an unregistered capability", () => {
+    expect(getToolPolicy("unknown.action")).toBeUndefined();
+    expect(() => assertToolPolicy({ name: "unknown.action", capability: "read", riskLevel: 1 })).toThrow(/not registered/i);
   });
 });

@@ -1,27 +1,129 @@
-const SHOPIFY_STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN;
-const SHOPIFY_ADMIN_ACCESS_TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
-
 type ShopifyVariables = Record<string, unknown>;
+type ShopifyEnvironment = Readonly<Record<string, string | undefined>>;
+type ShopifyFetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+type ShopifyErrorCode =
+  | "shopify_auth_failed"
+  | "shopify_rate_limited"
+  | "shopify_timeout"
+  | "shopify_upstream_failed"
+  | "shopify_transport_failed"
+  | "shopify_graphql_failed"
+  | "shopify_user_error"
+  | "shopify_malformed_response";
+
+export class ShopifyAdapterError extends Error {
+  constructor(
+    message: string,
+    public readonly code: ShopifyErrorCode,
+    public readonly status: number | undefined,
+    public readonly retriable: boolean,
+    public readonly retryAfterSeconds?: number,
+  ) {
+    super(message);
+    this.name = "ShopifyAdapterError";
+  }
+}
+
+function requireShopifyConfiguration(environment: ShopifyEnvironment) {
+  const domain = environment.SHOPIFY_STORE_DOMAIN?.trim();
+  const token = environment.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim();
+  const mode = environment.SHOPIFY_STORE_MODE?.trim();
+  if (!domain || !token || (mode !== "test" && mode !== "production")) {
+    throw new Error("Shopify adapter is not configured");
+  }
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(domain)) {
+    throw new Error("Shopify store domain is invalid");
+  }
+  if (mode === "test" && environment.SHOPIFY_TEST_STORE_DOMAIN?.trim() !== domain) {
+    throw new Error("Shopify test store domain does not match the configured store");
+  }
+  const configuredTimeout = environment.SHOPIFY_REQUEST_TIMEOUT_MS?.trim();
+  const timeoutMs = configuredTimeout ? Number(configuredTimeout) : 10_000;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 30_000) {
+    throw new Error("Shopify request timeout must be an integer between 1000 and 30000 milliseconds");
+  }
+  return { domain, token, timeoutMs };
+}
+
+function hasMutationUserErrors(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(hasMutationUserErrors);
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.userErrors) && record.userErrors.length > 0) return true;
+  return Object.values(record).some(hasMutationUserErrors);
+}
+
+function retryAfterSeconds(response: Response): number | undefined {
+  const value = response.headers.get("retry-after");
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  return Number(value);
+}
+
+export function createShopifyGraphQLAdapter(
+  environment: ShopifyEnvironment = process.env,
+  fetcher: ShopifyFetcher = fetch,
+) {
+  const { domain, token, timeoutMs } = requireShopifyConfiguration(environment);
+  const endpoint = `https://${domain}/admin/api/2026-04/graphql.json`;
+
+  return {
+    async graphql(query: string, variables: ShopifyVariables = {}) {
+      let response: Response;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        response = await fetcher(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": token,
+          },
+          body: JSON.stringify({ query, variables }),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new ShopifyAdapterError("Shopify request timed out", "shopify_timeout", undefined, true);
+        }
+        throw new ShopifyAdapterError("Shopify transport request failed", "shopify_transport_failed", undefined, true);
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new ShopifyAdapterError("Shopify authentication failed", "shopify_auth_failed", response.status, false);
+      }
+      if (response.status === 429) {
+        throw new ShopifyAdapterError("Shopify request was rate limited", "shopify_rate_limited", response.status, true, retryAfterSeconds(response));
+      }
+      if (!response.ok) {
+        throw new ShopifyAdapterError("Shopify upstream request failed", "shopify_upstream_failed", response.status, response.status >= 500);
+      }
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        throw new ShopifyAdapterError("Shopify returned a malformed response", "shopify_malformed_response", response.status, true);
+      }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new ShopifyAdapterError("Shopify returned a malformed response", "shopify_malformed_response", response.status, true);
+      }
+      const record = payload as { data?: unknown; errors?: unknown };
+      if (Array.isArray(record.errors) && record.errors.length > 0) {
+        throw new ShopifyAdapterError("Shopify GraphQL request failed", "shopify_graphql_failed", response.status, false);
+      }
+      if (hasMutationUserErrors(record.data)) {
+        throw new ShopifyAdapterError("Shopify rejected the requested mutation", "shopify_user_error", response.status, false);
+      }
+      return payload;
+    },
+  };
+}
 
 export async function shopifyGraphQL(query: string, variables: ShopifyVariables = {}) {
-  if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ADMIN_ACCESS_TOKEN) {
-    throw new Error("Shopify credentials are not configured");
-  }
-
-  const response = await fetch(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2026-04/graphql.json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Shopify-Access-Token": SHOPIFY_ADMIN_ACCESS_TOKEN,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Shopify API error: ${response.status}`);
-  }
-
-  return response.json();
+  return createShopifyGraphQLAdapter().graphql(query, variables);
 }
 
 export async function getShopifyCustomers(input: { first: number; query?: string }) {
