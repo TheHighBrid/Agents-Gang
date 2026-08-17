@@ -17,7 +17,19 @@
 | 8 | Oct 12–18 | Deployment Readiness | Migration runner, env validation, CI/CD release gate, staging rehearsal start. | Manus, Codex | Fresh/upgrade migration rehearsal and required CI checks pass. |
 | 9 | Oct 19–25 | Launch | Staging soak, founder UAT, runbooks, go/no-go, controlled deployment. | All agents + founder | Release checklist is complete and founder explicitly approves launch. |
 
-## 2. Week-by-Week Operating Plan
+## 2. Current Evidence Checkpoint — 17 August 2026
+
+The following milestone evidence is now present on `main` and has been reflected in the task tracker: C0-01 through C0-03, C1-01 through C1-04, C1-06, C2-01, and C3-05. The corresponding merged delivery evidence is PRs #40, #41, #42, #43, #44, #45, and #46, with the repository quality gate and Shopify integration checks passing on the current delivery branches.
+
+| Workstream | Current status | Evidence or next action |
+|---|---|---|
+| Program control | Accepted | CI quality gate, planning metadata, release evidence register, and decision-log conventions are merged. |
+| Approval control plane | Accepted for implemented scope | Founder boundary, paginated approval contract, protected APIs, state-safe decisions, and threat-model regressions are merged. The capability/risk registry C1-05 remains open and must not be treated as complete. |
+| Founder operations surface | C2-01 accepted; C2-02 active | Persisted approval queue/detail UI is merged. PR #48 is the active guarded decision workflow and is awaiting review/verification. |
+| Governed integration fabric | C3-05 accepted for currently enabled scheduled audits; C3-01 remains open | Shopify production/test-store boundary and policy evidence remain required. |
+| Codex review blocker | Active repair | PR #47’s quality gate failed at TypeScript compilation because `jobs/inboxTriage.ts` referenced `runInboxAlert` without importing it. Repair branch `agent/codex-fix-inbox-alert-typecheck` claims this blocker and will rerun the full quality gate. |
+
+## 3. Week-by-Week Operating Plan
 
 ### Week 0 — Program control and baseline discipline
 
@@ -112,7 +124,7 @@
 | **Fri Oct 23 — SOL 5.6 + founder** | Conduct founder operational walkthrough. | Founder acceptance or documented blockers. |
 | **Sat–Sun Oct 24–25 — Founder + Manus** | Controlled deployment only if all release checklist items are satisfied. | Explicit human go; post-deploy verification and rollback watch window. |
 
-## 3. Recurring Coordination Cadence
+## 4. Recurring Coordination Cadence
 
 | Cadence | Participants | Agenda | Artifact |
 |---|---|---|---|
@@ -122,7 +134,7 @@
 | Friday chapter review | All agents | Accept, defer, or block chapter tasks using evidence. | Release evidence register. |
 | Release go/no-go | Founder + all agents | Review checklist, unresolved risks, rollback, deployment window. | Signed decision record. |
 
-## 4. Calendar Change Rules
+## 5. Calendar Change Rules
 
 A target date changes only when the issue owner posts the dependency, impact, and new target date. Any slip to the critical path requires a chapter-review decision. New work must be filed as an issue and assigned to a milestone; it may not be hidden inside an unrelated pull request.
 
