@@ -8,15 +8,15 @@ Release proof and material implementation decisions are indexed in the [Release 
 
 | Task ID | GitHub issue | Priority | Milestone | Direct owner | Depends on | Status | Required acceptance evidence |
 |---|---:|---|---|---|---|---|---|
-| C0-01 | [#10](https://github.com/TheHighBrid/Agents-Gang/issues/10) | P0 | Chapter 0 — Program Control | Codex | — | Backlog | Full CI quality gate green on push and pull request. |
+| C0-01 | [#10](https://github.com/TheHighBrid/Agents-Gang/issues/10) | P0 | Chapter 0 — Program Control | Codex | — | Ready for review | Full CI quality gate green on push and pull request. |
 | C0-02 | [#11](https://github.com/TheHighBrid/Agents-Gang/issues/11) | P0 | Chapter 0 — Program Control | Manus Agent | — | Backlog | Labels, milestones, issue workflow, and planning references published. |
 | C0-03 | [#12](https://github.com/TheHighBrid/Agents-Gang/issues/12) | P1 | Chapter 0 — Program Control | SOL 5.6 | C0-02 | In progress | Release evidence register and decision-log convention documented. |
-| C1-01 | [#13](https://github.com/TheHighBrid/Agents-Gang/issues/13) | P0 | Chapter 1 — Approval Control Plane | Codex | C0-01 | Backlog | Anonymous/non-founder/founder authorization test matrix passes. |
-| C1-02 | [#14](https://github.com/TheHighBrid/Agents-Gang/issues/14) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01 | Backlog | Safe paginated approval repository queries and indexes verified. |
-| C1-03 | [#15](https://github.com/TheHighBrid/Agents-Gang/issues/15) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01, C1-02 | Backlog | Protected list/detail API contract and redaction tests pass. |
-| C1-04 | [#16](https://github.com/TheHighBrid/Agents-Gang/issues/16) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01, C1-02 | Backlog | Atomic pending-only approve/reject behavior and audit tests pass. |
+| C1-01 | [#13](https://github.com/TheHighBrid/Agents-Gang/issues/13) | P0 | Chapter 1 — Approval Control Plane | Codex | C0-01 | Ready for review | Anonymous/non-founder/founder authorization test matrix passes. |
+| C1-02 | [#14](https://github.com/TheHighBrid/Agents-Gang/issues/14) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01 | Ready for review | Safe paginated approval repository queries and indexes verified. |
+| C1-03 | [#15](https://github.com/TheHighBrid/Agents-Gang/issues/15) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01, C1-02 | Ready for review | Protected list/detail API contract and redaction tests pass. |
+| C1-04 | [#16](https://github.com/TheHighBrid/Agents-Gang/issues/16) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-01, C1-02 | Ready for review | Atomic pending-only approve/reject behavior and audit tests pass. |
 | C1-05 | [#17](https://github.com/TheHighBrid/Agents-Gang/issues/17) | P0 | Chapter 1 — Approval Control Plane | Manus Agent | C1-01 | Backlog | Typed policy registry covers every enabled tool/action. |
-| C1-06 | [#18](https://github.com/TheHighBrid/Agents-Gang/issues/18) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-03, C1-04, C1-05 | Backlog | Threat model and abuse regressions are reviewed and green. |
+| C1-06 | [#18](https://github.com/TheHighBrid/Agents-Gang/issues/18) | P0 | Chapter 1 — Approval Control Plane | Codex | C1-03, C1-04, C1-05 | Ready for review | Threat model and abuse regressions are reviewed and green. |
 | C2-01 | [#19](https://github.com/TheHighBrid/Agents-Gang/issues/19) | P0 | Chapter 2 — Founder Operations Surface | SOL 5.6 | C1-03 | Backlog | Accessible approval queue/detail UI reads protected persisted data. |
 | C2-02 | [#20](https://github.com/TheHighBrid/Agents-Gang/issues/20) | P0 | Chapter 2 — Founder Operations Surface | SOL 5.6 | C1-04, C2-01 | Backlog | Confirmed decision flow handles conflict, expired, and consumed states. |
 | C2-03 | [#21](https://github.com/TheHighBrid/Agents-Gang/issues/21) | P1 | Chapter 2 — Founder Operations Surface | SOL 5.6 | C1-02 | Backlog | Persisted run/route/tool/audit dashboard with all state handling. |
