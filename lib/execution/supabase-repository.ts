@@ -1,4 +1,5 @@
 import type {
+  AcquireJobLeaseInput,
   AgentRunRecord,
   AuditEventRecord,
   ApprovalDecisionInput,
@@ -10,6 +11,8 @@ import type {
   RecordAuditEventInput,
   RecordRoutingDecisionInput,
   RecordToolCallInput,
+  ReleaseJobLeaseInput,
+  JobLeaseRecord,
   RoutingDecisionRecord,
   ToolCallRecord,
 } from "./repository";
@@ -52,6 +55,7 @@ type SupabaseAgentRunRow = {
   output_summary?: string | null;
   error_code?: string | null;
   duration_ms?: number | null;
+  idempotency_key?: string | null;
 };
 
 type SupabaseRoutingDecisionRow = {
@@ -115,6 +119,15 @@ function toApprovalRecord(row: SupabaseApprovalRow): ApprovalRecord {
   };
 }
 
+function toJobLeaseRecord(row: { lease_key: string; owner_id: string; acquired_at: string; expires_at: string }): JobLeaseRecord {
+  return {
+    leaseKey: row.lease_key,
+    ownerId: row.owner_id,
+    acquiredAt: row.acquired_at,
+    expiresAt: row.expires_at,
+  };
+}
+
 function toAgentRunRecord(row: SupabaseAgentRunRow): AgentRunRecord {
   return {
     id: row.id,
@@ -130,6 +143,7 @@ function toAgentRunRecord(row: SupabaseAgentRunRow): AgentRunRecord {
     outputSummary: row.output_summary ?? undefined,
     errorCode: row.error_code ?? undefined,
     durationMs: row.duration_ms ?? undefined,
+    idempotencyKey: row.idempotency_key ?? undefined,
   };
 }
 
@@ -238,6 +252,14 @@ export function createSupabaseExecutionRepository({
       return rows[0] ? toApprovalRecord(rows[0]) : undefined;
     },
 
+    async listApprovals() {
+      const rows = await requestRows<SupabaseApprovalRow>(
+        "/approval_requests?select=*&order=created_at.desc",
+        { method: "GET" },
+      );
+      return rows.map(toApprovalRecord);
+    },
+
     async decideApproval(input: ApprovalDecisionInput) {
       const timestamp = new Date().toISOString();
       const rows = await requestRows<SupabaseApprovalRow>(
@@ -270,6 +292,7 @@ export function createSupabaseExecutionRepository({
           route_agent: input.routeAgent,
           risk_level: input.riskLevel,
           input_summary: input.inputSummary,
+          idempotency_key: input.idempotencyKey,
         }),
       });
       if (rows.length !== 1) {
@@ -278,6 +301,37 @@ export function createSupabaseExecutionRepository({
       return toAgentRunRecord(rows[0]);
     },
 
+    async acquireJobLease(input: AcquireJobLeaseInput) {
+      const rows = await requestRows<{ lease_key: string; owner_id: string; acquired_at: string; expires_at: string }>(
+        "/rpc/acquire_job_lease",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            p_lease_key: input.leaseKey,
+            p_owner_id: input.ownerId,
+            p_lease_duration_ms: input.leaseDurationMs,
+          }),
+        },
+      );
+      return rows[0] ? toJobLeaseRecord(rows[0]) : undefined;
+    },
+    async releaseJobLease(input: ReleaseJobLeaseInput) {
+      const rows = await requestRows<{ released: boolean }>(
+        "/rpc/release_job_lease",
+        {
+          method: "POST",
+          body: JSON.stringify({ p_lease_key: input.leaseKey, p_owner_id: input.ownerId }),
+        },
+      );
+      return rows[0]?.released === true;
+    },
+    async findAgentRunByIdempotencyKey(idempotencyKey) {
+      const rows = await requestRows<SupabaseAgentRunRow>(
+        `/agent_runs?idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`,
+        {},
+      );
+      return rows[0] ? toAgentRunRecord(rows[0]) : undefined;
+    },
     async completeAgentRun(input: CompleteAgentRunInput) {
       const timestamp = new Date().toISOString();
       const rows = await requestRows<SupabaseAgentRunRow>(

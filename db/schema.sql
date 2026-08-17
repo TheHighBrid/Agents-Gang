@@ -108,3 +108,67 @@ create table if not exists brand_memory (
   title text not null,
   content text not null
 );
+
+
+alter table agent_runs
+  add column if not exists idempotency_key text;
+
+create unique index if not exists agent_runs_idempotency_key_idx
+  on agent_runs (idempotency_key)
+  where idempotency_key is not null;
+
+create table if not exists job_leases (
+  lease_key text primary key,
+  owner_id text not null,
+  acquired_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
+create or replace function acquire_job_lease(
+  p_lease_key text,
+  p_owner_id text,
+  p_lease_duration_ms integer
+)
+returns table (lease_key text, owner_id text, acquired_at timestamptz, expires_at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  current_time timestamptz := clock_timestamp();
+  result job_leases%rowtype;
+begin
+  if p_lease_duration_ms <= 0 then
+    raise exception 'lease duration must be positive';
+  end if;
+
+  insert into job_leases (lease_key, owner_id, acquired_at, expires_at)
+  values (
+    p_lease_key,
+    p_owner_id,
+    current_time,
+    current_time + make_interval(msecs => p_lease_duration_ms)
+  )
+  on conflict (lease_key) do update
+    set owner_id = excluded.owner_id,
+        acquired_at = excluded.acquired_at,
+        expires_at = excluded.expires_at
+    where job_leases.expires_at <= current_time
+  returning job_leases.* into result;
+
+  if result.lease_key is not null then
+    return query select result.lease_key, result.owner_id, result.acquired_at, result.expires_at;
+  end if;
+end;
+$$;
+
+create or replace function release_job_lease(p_lease_key text, p_owner_id text)
+returns table (released boolean)
+language sql
+security definer
+set search_path = public
+as $$
+  delete from job_leases
+  where lease_key = p_lease_key and owner_id = p_owner_id
+  returning true as released;
+$$;

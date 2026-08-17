@@ -43,3 +43,51 @@ describe("Shopify product read tool", () => {
     ]);
   });
 });
+
+
+test("normalizes Shopify rate limits as retryable errors", async () => {
+  const { createShopifyClient } = await import("../tools/shopify");
+  const client = createShopifyClient({
+    storeDomain: "example.myshopify.com",
+    accessToken: "test-token",
+    request: async () => new Response("", { status: 429, headers: { "Retry-After": "7" } }),
+  });
+
+  await expect(client.getProducts(20)).rejects.toMatchObject({
+    code: "rate_limited",
+    retryable: true,
+    retryAfterSeconds: 7,
+  });
+});
+
+test("normalizes Shopify auth failures without exposing credentials", async () => {
+  const { createShopifyClient } = await import("../tools/shopify");
+  const client = createShopifyClient({
+    storeDomain: "example.myshopify.com",
+    accessToken: "super-secret-token",
+    request: async () => new Response("forbidden", { status: 401 }),
+  });
+
+  await expect(client.getProducts(20)).rejects.toMatchObject({
+    code: "authentication_failed",
+    retryable: false,
+  });
+  await expect(client.getProducts(20)).rejects.not.toThrow("super-secret-token");
+});
+
+test("rejects malformed and GraphQL-error responses through the transport boundary", async () => {
+  const { createShopifyClient } = await import("../tools/shopify");
+  const malformed = createShopifyClient({
+    storeDomain: "example.myshopify.com",
+    accessToken: "test-token",
+    request: async () => new Response("not-json", { status: 200 }),
+  });
+  await expect(malformed.getProducts(20)).rejects.toMatchObject({ code: "malformed_response" });
+
+  const graphqlError = createShopifyClient({
+    storeDomain: "example.myshopify.com",
+    accessToken: "test-token",
+    request: async () => new Response(JSON.stringify({ errors: [{ message: "Query rejected" }] }), { status: 200 }),
+  });
+  await expect(graphqlError.getProducts(20)).rejects.toMatchObject({ code: "graphql_error", retryable: false });
+});

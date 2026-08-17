@@ -29,6 +29,24 @@ export type ApprovalDecisionInput = {
   result: string;
 };
 
+export type JobLeaseRecord = {
+  leaseKey: string;
+  ownerId: string;
+  acquiredAt: string;
+  expiresAt: string;
+};
+
+export type AcquireJobLeaseInput = {
+  leaseKey: string;
+  ownerId: string;
+  leaseDurationMs: number;
+};
+
+export type ReleaseJobLeaseInput = {
+  leaseKey: string;
+  ownerId: string;
+};
+
 export type AgentRunStatus = "running" | "completed" | "failed" | "blocked";
 
 export type AgentRunRecord = {
@@ -45,6 +63,7 @@ export type AgentRunRecord = {
   outputSummary?: string;
   errorCode?: string;
   durationMs?: number;
+  idempotencyKey?: string;
 };
 
 export type CreateAgentRunInput = Omit<
@@ -112,7 +131,11 @@ export type ExecutionRepository = {
   recordRoutingDecision(input: RecordRoutingDecisionInput): Promise<RoutingDecisionRecord>;
   recordAuditEvent(input: RecordAuditEventInput): Promise<AuditEventRecord>;
   recordToolCall(input: RecordToolCallInput): Promise<ToolCallRecord>;
+  listApprovals(): Promise<ApprovalRecord[]>;
   listAgentRuns(): Promise<AgentRunRecord[]>;
+  findAgentRunByIdempotencyKey(idempotencyKey: string): Promise<AgentRunRecord | undefined>;
+  acquireJobLease(input: AcquireJobLeaseInput): Promise<JobLeaseRecord | undefined>;
+  releaseJobLease(input: ReleaseJobLeaseInput): Promise<boolean>;
   listRoutingDecisions(): Promise<RoutingDecisionRecord[]>;
   listAuditEvents(): Promise<AuditEventRecord[]>;
   listToolCalls(): Promise<ToolCallRecord[]>;
@@ -130,6 +153,9 @@ export function createInMemoryExecutionRepository({
   const routingDecisions: RoutingDecisionRecord[] = [];
   const auditEvents: AuditEventRecord[] = [];
   const toolCalls: ToolCallRecord[] = [];
+  const jobLeases = new Map<string, JobLeaseRecord>();
+  const newestFirst = <T extends { createdAt: string }>(records: T[]) =>
+    [...records].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
   return {
     async createApproval(input) {
@@ -147,6 +173,10 @@ export function createInMemoryExecutionRepository({
 
     async getApproval(approvalId) {
       return approvals.get(approvalId);
+    },
+
+    async listApprovals() {
+      return [...approvals.values()].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt));
     },
 
     async decideApproval(input) {
@@ -178,11 +208,40 @@ export function createInMemoryExecutionRepository({
         status: "running" as const,
         createdAt: clock().toISOString(),
       };
-      agentRuns.set(run.id, run);
+            agentRuns.set(run.id, run);
       return run;
     },
-
+    async findAgentRunByIdempotencyKey(idempotencyKey) {
+      return [...agentRuns.values()].find((run) => run.idempotencyKey === idempotencyKey);
+    },
+    async acquireJobLease(input) {
+      if (!Number.isInteger(input.leaseDurationMs) || input.leaseDurationMs <= 0) {
+        throw new Error("Lease duration must be a positive integer");
+      }
+      const now = clock();
+      const existing = jobLeases.get(input.leaseKey);
+      if (existing && new Date(existing.expiresAt).getTime() > now.getTime()) {
+        return undefined;
+      }
+      const lease = {
+        leaseKey: input.leaseKey,
+        ownerId: input.ownerId,
+        acquiredAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + input.leaseDurationMs).toISOString(),
+      };
+      jobLeases.set(input.leaseKey, lease);
+      return lease;
+    },
+    async releaseJobLease(input) {
+      const existing = jobLeases.get(input.leaseKey);
+      if (!existing || existing.ownerId !== input.ownerId) {
+        return false;
+      }
+      jobLeases.delete(input.leaseKey);
+      return true;
+    },
     async completeAgentRun(input) {
+
       const run = agentRuns.get(input.runId);
       if (!run) {
         throw new Error(`Agent run not found: ${input.runId}`);
@@ -235,19 +294,19 @@ export function createInMemoryExecutionRepository({
     },
 
     async listAgentRuns() {
-      return [...agentRuns.values()];
+      return newestFirst([...agentRuns.values()].map((run) => ({ ...run, createdAt: run.createdAt })));
     },
 
     async listRoutingDecisions() {
-      return [...routingDecisions];
+      return newestFirst(routingDecisions);
     },
 
     async listAuditEvents() {
-      return [...auditEvents];
+      return newestFirst(auditEvents);
     },
 
     async listToolCalls() {
-      return [...toolCalls];
+      return newestFirst(toolCalls);
     },
   };
 }
