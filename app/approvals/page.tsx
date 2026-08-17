@@ -1,109 +1,215 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
+
+type ApprovalStatus = "pending" | "approved" | "rejected";
 
 type Approval = {
   id: string;
   requestingAgent: string;
   actionType: string;
   target: { type: string; id: string };
-  riskLevel: 1 | 2 | 3 | 4;
+  riskLevel: number;
   payloadSummary: string;
-  status: "pending" | "approved" | "rejected" | "expired";
+  status: ApprovalStatus;
   requestedAt: string;
   updatedAt: string;
   decidedAt?: string;
   result?: string;
 };
 
-type Filter = "all" | Approval["status"];
-
-const statusLabels: Record<Approval["status"], string> = {
-  pending: "Pending review",
+const statusLabels: Record<ApprovalStatus | "all", string> = {
+  all: "All requests",
+  pending: "Needs review",
   approved: "Approved",
   rejected: "Rejected",
-  expired: "Expired",
 };
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-CA", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
 export default function ApprovalsPage() {
+  const [token, setToken] = useState("");
   const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/approvals", { cache: "no-store" })
-      .then(async (response) => {
-        const payload = (await response.json()) as { approvals?: Approval[]; error?: string };
-        if (!response.ok) throw new Error(payload.error || "Unable to load approval requests");
-        return payload.approvals || [];
-      })
-      .then((records) => { if (active) setApprovals(records); })
-      .catch((requestError: unknown) => {
-        if (active) setError(requestError instanceof Error ? requestError.message : "Unable to load approval requests");
-      })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+  const [filter, setFilter] = useState<ApprovalStatus | "all">("pending");
+  const [message, setMessage] = useState("Enter the approval API token to load the queue.");
+  const [loading, setLoading] = useState(false);
 
   const visibleApprovals = useMemo(
     () => filter === "all" ? approvals : approvals.filter((approval) => approval.status === filter),
     [approvals, filter],
   );
-  const pendingCount = approvals.filter((approval) => approval.status === "pending").length;
+
+  async function loadApprovals(event?: FormEvent) {
+    event?.preventDefault();
+    if (!token.trim()) {
+      setMessage("A founder approval token is required.");
+      return;
+    }
+    setLoading(true);
+    setMessage("Loading approval queue…");
+    try {
+      const response = await fetch("/api/approvals", {
+        headers: { Authorization: `Bearer ${token.trim()}` },
+        cache: "no-store",
+      });
+      const body = await response.json() as { approvals?: Approval[]; error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Unable to load approvals");
+      setApprovals(body.approvals ?? []);
+      setMessage(`${body.approvals?.length ?? 0} approval requests loaded.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to load approvals");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function decide(approvalId: string, status: Extract<ApprovalStatus, "approved" | "rejected">, result: string) {
+    if (!result.trim()) {
+      setMessage("Add a short decision note before submitting.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status, result }),
+      });
+      const body = await response.json() as { approval?: Approval; error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Unable to save decision");
+      if (body.approval) {
+        setApprovals((current) => current.map((item) => item.id === body.approval?.id ? body.approval : item));
+      }
+      setMessage(`Request ${status}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save decision");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <main style={{ background: "#0b0b0d" }}>
-      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 24, alignItems: "end", flexWrap: "wrap" }}>
-          <div>
-            <p style={{ color: "#b7a67d", letterSpacing: "0.16em", textTransform: "uppercase", fontSize: 12, margin: 0 }}>Governed execution</p>
-            <h1 style={{ fontSize: 48, lineHeight: 1, margin: "12px 0" }}>Approvals</h1>
-            <p style={{ color: "#aaa7a0", maxWidth: 620, lineHeight: 1.6, margin: 0 }}>Review prepared actions before a specialist agent can publish, send, change, or otherwise execute them.</p>
-          </div>
-          <div style={{ border: "1px solid #3b3426", borderRadius: 14, padding: "16px 20px", minWidth: 150 }}>
-            <div style={{ color: "#aaa7a0", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.12em" }}>Awaiting review</div>
-            <strong style={{ display: "block", fontSize: 32, marginTop: 6 }}>{pendingCount}</strong>
-          </div>
+    <main className="approval-shell">
+      <header className="approval-header">
+        <div>
+          <p className="eyebrow">Melato OS / Governance</p>
+          <h1>Approval queue</h1>
+          <p className="lede">Review prepared actions before they reach Shopify, inboxes, calendars, or customer-facing surfaces.</p>
         </div>
+        <div className="header-mark" aria-hidden="true">MG</div>
+      </header>
 
-        <div style={{ display: "flex", gap: 8, margin: "36px 0 18px", flexWrap: "wrap" }} role="tablist" aria-label="Approval filters">
-          {(["all", "pending", "approved", "rejected", "expired"] as Filter[]).map((option) => (
-            <button key={option} type="button" role="tab" aria-selected={filter === option} onClick={() => setFilter(option)} style={{ border: filter === option ? "1px solid #b7a67d" : "1px solid #302f33", background: filter === option ? "#28231a" : "transparent", color: "#f5f1e8", borderRadius: 999, padding: "9px 14px", cursor: "pointer", textTransform: "capitalize" }}>
-              {option}
+      <section className="access-panel" aria-labelledby="access-heading">
+        <div>
+          <p className="section-kicker">Founder access</p>
+          <h2 id="access-heading">Open the governed queue</h2>
+          <p className="muted">The token is used only for this browser session and is never sent anywhere except the approval API.</p>
+        </div>
+        <form className="access-form" onSubmit={loadApprovals}>
+          <label htmlFor="approval-token">Approval API token</label>
+          <div className="access-row">
+            <input
+              id="approval-token"
+              type="password"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+              placeholder="Paste token"
+              autoComplete="off"
+            />
+            <button type="submit" disabled={loading}>{loading ? "Loading…" : "Load queue"}</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="queue-toolbar" aria-label="Approval filters">
+        <div>
+          <p className="section-kicker">Decision desk</p>
+          <h2>Requests requiring judgment</h2>
+        </div>
+        <div className="filter-row" role="tablist" aria-label="Filter approvals">
+          {(Object.keys(statusLabels) as Array<ApprovalStatus | "all">).map((status) => (
+            <button
+              key={status}
+              type="button"
+              className={filter === status ? "filter active" : "filter"}
+              onClick={() => setFilter(status)}
+              role="tab"
+              aria-selected={filter === status}
+            >
+              {statusLabels[status]}
             </button>
           ))}
         </div>
+      </section>
 
-        {loading && <p style={{ color: "#aaa7a0" }}>Loading approval requests…</p>}
-        {error && <p role="alert" style={{ color: "#ff9d9d", border: "1px solid #6c3030", borderRadius: 12, padding: 16 }}>{error}</p>}
-        {!loading && !error && visibleApprovals.length === 0 && <div style={{ border: "1px dashed #3a383e", borderRadius: 16, padding: 40, color: "#aaa7a0" }}>No approval requests match this filter.</div>}
-        <div style={{ display: "grid", gap: 14 }}>
-          {visibleApprovals.map((approval) => (
-            <article key={approval.id} style={{ border: "1px solid #302f33", borderRadius: 16, padding: 22, background: "#111114" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", flexWrap: "wrap" }}>
-                <div>
-                  <p style={{ color: "#b7a67d", fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", margin: 0 }}>{approval.actionType}</p>
-                  <h2 style={{ fontSize: 22, margin: "8px 0" }}>{approval.payloadSummary}</h2>
-                </div>
-                <span style={{ border: "1px solid #4a4438", borderRadius: 999, padding: "7px 11px", color: approval.status === "pending" ? "#f0d391" : "#d7d2c6", fontSize: 12 }}>{statusLabels[approval.status]}</span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16, marginTop: 20, color: "#aaa7a0", fontSize: 13 }}>
-                <div><strong style={{ color: "#f5f1e8", display: "block" }}>Requesting agent</strong>{approval.requestingAgent}</div>
-                <div><strong style={{ color: "#f5f1e8", display: "block" }}>Target</strong>{approval.target.type}: {approval.target.id}</div>
-                <div><strong style={{ color: "#f5f1e8", display: "block" }}>Risk level</strong>{approval.riskLevel} / 4</div>
-                <div><strong style={{ color: "#f5f1e8", display: "block" }}>Requested</strong>{formatDate(approval.requestedAt)}</div>
-              </div>
-              {approval.result && <p style={{ color: "#d7d2c6", borderTop: "1px solid #29282d", paddingTop: 14, margin: "18px 0 0" }}>{approval.result}</p>}
-            </article>
-          ))}
-        </div>
-      </div>
+      <p className="queue-message" role="status">{message}</p>
+
+      <section className="approval-grid" aria-live="polite">
+        {visibleApprovals.length === 0 ? (
+          <div className="empty-state">
+            <span className="empty-icon" aria-hidden="true">✓</span>
+            <h3>{filter === "pending" ? "The queue is clear" : "No matching requests"}</h3>
+            <p>Prepared actions will appear here with their target, risk level, and decision history.</p>
+          </div>
+        ) : visibleApprovals.map((approval) => (
+          <ApprovalCard key={approval.id} approval={approval} loading={loading} onDecide={decide} />
+        ))}
+      </section>
     </main>
   );
+}
+
+function ApprovalCard({
+  approval,
+  loading,
+  onDecide,
+}: {
+  approval: Approval;
+  loading: boolean;
+  onDecide: (id: string, status: Extract<ApprovalStatus, "approved" | "rejected">, result: string) => Promise<void>;
+}) {
+  const [note, setNote] = useState("");
+  const isPending = approval.status === "pending";
+
+  return (
+    <article className={`approval-card ${isPending ? "pending" : "resolved"}`}>
+      <div className="card-topline">
+        <span className={`status-badge ${approval.status}`}>{approval.status}</span>
+        <span className="risk-badge">Risk {approval.riskLevel}</span>
+      </div>
+      <h3>{formatAction(approval.actionType)}</h3>
+      <p className="payload">{approval.payloadSummary}</p>
+      <dl className="approval-meta">
+        <div><dt>Requested by</dt><dd>{approval.requestingAgent}</dd></div>
+        <div><dt>Target</dt><dd>{approval.target.type} / {approval.target.id}</dd></div>
+        <div><dt>Requested</dt><dd>{formatDate(approval.requestedAt)}</dd></div>
+      </dl>
+      {approval.result && <p className="decision-note"><strong>Decision note:</strong> {approval.result}</p>}
+      {isPending && (
+        <div className="decision-panel">
+          <label htmlFor={`note-${approval.id}`}>Decision note</label>
+          <textarea
+            id={`note-${approval.id}`}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Why is this safe to proceed?"
+            rows={2}
+          />
+          <div className="decision-actions">
+            <button type="button" className="reject" disabled={loading} onClick={() => onDecide(approval.id, "rejected", note)}>Reject</button>
+            <button type="button" className="approve" disabled={loading} onClick={() => onDecide(approval.id, "approved", note)}>Approve action</button>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function formatAction(action: string) {
+  return action.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }

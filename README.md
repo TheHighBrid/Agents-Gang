@@ -31,6 +31,10 @@ A typical governed operation follows this sequence:
 
 The current product-page scan job invokes Shopify through this same tool contract; it no longer calls the Shopify adapter directly.
 
+## Approval desk
+
+The `/approvals` page provides a persisted approval queue backed by the execution repository. Configure the server-side `APPROVALS_API_TOKEN` environment variable before using it. The browser sends the token as a Bearer credential only to `/api/approvals`; the API supports queue loading and explicit approve/reject decisions with a required decision note. Do not expose the token through client configuration or commit it to the repository.
+
 ## Execution roadmap
 
 `ANTHROPIC_MODEL` is optional and lets deployments select a different model
@@ -39,7 +43,7 @@ without a code change. The chat endpoint accepts JSON in the form
 time out after 30 seconds and return a structured JSON error if routing or the
 provider response is invalid.
 
-1. Build authenticated approval APIs and make the approvals dashboard display and decide persisted approval records.
+1. Build authenticated approval APIs and make the approvals dashboard display and decide persisted approval records. **Complete.**
 2. Route each remaining real adapter and scheduled job through the common execution contract.
 3. Add a production migration runner and deployment-level Supabase verification.
 4. Add real tool adapters and capability policies for Shopify draft updates, Gmail, Calendar, image audit, and web search.
