@@ -38,12 +38,14 @@ function parseDate(value: string | null, label: string) {
   return date.toISOString();
 }
 
-export async function getApprovalListResponse(repository: ExecutionRepository, url?: string): Promise<Response> {
-  if (!url) {
-    const approvals = await repository.listApprovals();
-    return Response.json({ approvals: approvals.map(toSafeApproval) });
+export async function getApprovalListResponse(repository: ExecutionRepository, url = "https://example.test/api/approvals"): Promise<Response> {
+  let query: ApprovalQuery;
+  try {
+    query = parseApprovalQuery(url);
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Approval query is invalid" }, { status: 400 });
   }
-  const page = await repository.queryApprovals(parseApprovalQuery(url));
+  const page = await repository.queryApprovals(query);
   return Response.json({ approvals: page.approvals.map(toSafeApproval), nextCursor: page.nextCursor ?? null });
 }
 
