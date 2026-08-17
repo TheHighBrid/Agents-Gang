@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./approvals/approvals.css";
 
 export const metadata: Metadata = {
   title: "Melato Agent Swarm",
