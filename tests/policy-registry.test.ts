@@ -14,6 +14,7 @@ describe("typed capability and risk policy registry", () => {
       "web.search",
       "gmail.messages.search",
       "gmail.draft.create",
+      "gmail.draft.send",
       "product.image.audit",
       "inbox.alert.send",
       "shopify.products.read",
@@ -33,6 +34,7 @@ describe("typed capability and risk policy registry", () => {
   test("marks reads as risk 1 and mutating or drafting actions as approval-gated risk 3", () => {
     expect(getToolPolicy("gmail.messages.search")).toMatchObject({ capability: "read", riskLevel: 1, approvalRequired: false });
     expect(getToolPolicy("gmail.draft.create")).toMatchObject({ capability: "draft", riskLevel: 3, approvalRequired: true, targetBinding: "required" });
+    expect(getToolPolicy("gmail.draft.send")).toMatchObject({ capability: "execute", riskLevel: 4, approvalRequired: true, targetBinding: "required" });
     expect(getToolPolicy("shopify.product.update")).toMatchObject({ capability: "execute", riskLevel: 3, approvalRequired: true, targetBinding: "required" });
   });
 

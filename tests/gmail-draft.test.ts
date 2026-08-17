@@ -11,6 +11,15 @@ describe("governed Gmail draft creation", () => {
     body: "Thanks — I will review this today.",
   };
 
+  test("never stores draft body content in the approval summary", async () => {
+    const repository = createInMemoryExecutionRepository();
+    const approval = await createGmailDraftApproval(repository, input, "inbox_triage_agent");
+
+    expect(approval.payloadSummary).toContain("sender@example.com");
+    expect(approval.payloadSummary).toContain("Re: Action needed");
+    expect(approval.payloadSummary).not.toContain(input.body);
+  });
+
   test("blocks draft creation without explicit approval", async () => {
     const repository = createInMemoryExecutionRepository();
     const writer = vi.fn();

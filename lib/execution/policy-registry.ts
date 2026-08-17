@@ -33,6 +33,14 @@ const draftPolicy = (actionType: string): ToolPolicy => ({
   targetBinding: "required",
 });
 
+const sendPolicy = (actionType: string): ToolPolicy => ({
+  actionType,
+  capability: "execute",
+  riskLevel: 4,
+  approvalRequired: true,
+  targetBinding: "required",
+});
+
 const alertPolicy = (actionType: string): ToolPolicy => ({
   actionType,
   capability: "execute",
@@ -45,6 +53,7 @@ export const TOOL_POLICY_REGISTRY: readonly ToolPolicy[] = Object.freeze([
   readPolicy("web.search"),
   readPolicy("gmail.messages.search"),
   draftPolicy("gmail.draft.create"),
+  sendPolicy("gmail.draft.send"),
   readPolicy("product.image.audit"),
   alertPolicy("inbox.alert.send"),
   readPolicy("shopify.products.read"),
