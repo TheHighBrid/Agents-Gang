@@ -131,6 +131,23 @@
   overflow-wrap: anywhere;
 }
 
+.decision-state,
+.terminal-decision-note {
+  margin: 14px 0 0;
+  padding: 11px 12px;
+  border: 1px solid #353231;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.decision-state.submitting { border-color: #665331; background: #201b13; color: #d9c18d; }
+.decision-state.success { border-color: #2f5f4d; background: #14241e; color: #8adab4; }
+.decision-state.conflict { border-color: #725a31; background: #241d13; color: #e0c181; }
+.decision-state.error { border-color: #653239; background: #251719; color: #efadb4; }
+.terminal-decision-note { background: #141416; color: #8f8a82; }
+.confirmation-panel:focus { outline: 2px solid #f0d391; outline-offset: 3px; }
+
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
