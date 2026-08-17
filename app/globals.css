@@ -90,6 +90,10 @@ button:hover:not(:disabled) { background: #d0a767; }
 .reject { background: transparent; color: #dc8790; }
 .reject:hover:not(:disabled) { background: #351f23; }
 .approve { background: #b78c4d; }
+.confirmation-panel { margin-top: 15px; padding: 15px; border: 1px solid #6a4f2d; border-radius: 10px; background: #201a12; }
+.confirmation-title { margin: 0 0 7px; color: #f0d391; font-family: "DM Mono", monospace; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.confirmation-copy { margin: 0; color: #b9aa91; font-size: 12px; line-height: 1.5; }
+.confirmation-panel .decision-actions { margin-top: 13px; }
 
 .empty-state { grid-column: 1 / -1; padding: 72px 24px; border: 1px dashed #383431; border-radius: 18px; text-align: center; }
 .empty-icon { display: grid; width: 42px; height: 42px; margin: 0 auto 16px; place-items: center; border-radius: 50%; background: #173128; color: #76d7aa; font-size: 21px; }

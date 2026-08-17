@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { approvalConfirmationText, requiresExplicitApprovalConfirmation } from "../../lib/approvals/decision";
 
 type ApprovalStatus = "pending" | "approved" | "rejected";
 
@@ -77,6 +78,12 @@ export default function ApprovalsPage() {
         body: JSON.stringify({ status, result }),
       });
       const body = await response.json() as { approval?: Approval; error?: string };
+      if (response.status === 409) {
+        setMessage("No action was taken because this request changed. Refreshing the queue…");
+        await loadApprovals();
+        setMessage("No action was taken. The queue has been refreshed with the latest state.");
+        return;
+      }
       if (!response.ok) throw new Error(body.error ?? "Unable to save decision");
       if (body.approval) {
         setApprovals((current) => current.map((item) => item.id === body.approval?.id ? body.approval : item));
@@ -170,7 +177,16 @@ function ApprovalCard({
   onDecide: (id: string, status: Extract<ApprovalStatus, "approved" | "rejected">, result: string) => Promise<void>;
 }) {
   const [note, setNote] = useState("");
+  const [confirming, setConfirming] = useState<Extract<ApprovalStatus, "approved" | "rejected"> | null>(null);
   const isPending = approval.status === "pending";
+
+  function requestDecision(status: Extract<ApprovalStatus, "approved" | "rejected">) {
+    if (requiresExplicitApprovalConfirmation(approval.riskLevel)) {
+      setConfirming(status);
+      return;
+    }
+    void onDecide(approval.id, status, note);
+  }
 
   return (
     <article className={`approval-card ${isPending ? "pending" : "resolved"}`}>
@@ -197,9 +213,19 @@ function ApprovalCard({
             rows={2}
           />
           <div className="decision-actions">
-            <button type="button" className="reject" disabled={loading} onClick={() => onDecide(approval.id, "rejected", note)}>Reject</button>
-            <button type="button" className="approve" disabled={loading} onClick={() => onDecide(approval.id, "approved", note)}>Approve action</button>
+            <button type="button" className="reject" disabled={loading} onClick={() => requestDecision("rejected")}>Reject</button>
+            <button type="button" className="approve" disabled={loading} onClick={() => requestDecision("approved")}>Approve action</button>
           </div>
+          {confirming && (
+            <div className="confirmation-panel" role="alertdialog" aria-labelledby={`confirm-${approval.id}`}>
+              <p className="confirmation-title" id={`confirm-${approval.id}`}>{approvalConfirmationText(approval)}</p>
+              <p className="confirmation-copy">This is a risk {approval.riskLevel} action. Confirm that you want to {confirming} it after reviewing the action and target above.</p>
+              <div className="decision-actions">
+                <button type="button" className="reject" disabled={loading} onClick={() => setConfirming(null)}>Cancel</button>
+                <button type="button" className="approve" disabled={loading} onClick={() => { setConfirming(null); void onDecide(approval.id, confirming, note); }}>Confirm {confirming}</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </article>
