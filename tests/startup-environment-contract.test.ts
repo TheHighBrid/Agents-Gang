@@ -10,6 +10,7 @@ describe("startup environment validation", () => {
     expect(instrumentation).toContain("assertDeploymentEnvironment");
     expect(instrumentation).toContain("AGENTS_GANG_ENVIRONMENT");
     expect(instrumentation).toContain('target === "staging" || target === "production"');
-    expect(instrumentation).toContain('process.env.NEXT_RUNTIME === "nodejs"');
+    expect(instrumentation).toContain('process.env.NEXT_RUNTIME !== "nodejs"');
+    expect(instrumentation).toContain("return;");
   });
 });
