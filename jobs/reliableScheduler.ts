@@ -1,4 +1,5 @@
 import type { ExecutionRepository, ScheduledJobRecord } from "../lib/execution/repository";
+import { createCorrelationId } from "../lib/observability/correlation";
 import { runGovernedJob } from "./governedJob";
 
 export type ReliableScheduledJobDefinition<T> = {
@@ -10,6 +11,7 @@ export type ReliableScheduledJobDefinition<T> = {
   reason: string;
   neededTools: string[];
   riskLevel?: 1 | 2 | 3 | 4;
+  correlationId?: string;
   leaseSeconds?: number;
   retry?: {
     maxAttempts?: number;
@@ -33,6 +35,7 @@ export async function runReliableScheduledJob<T>(
 ): Promise<ReliableScheduledJobResult<T>> {
   const maxAttempts = definition.retry?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const retryDelayMs = definition.retry?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+  const correlationId = createCorrelationId(definition.correlationId);
   validateSchedulerConfiguration(maxAttempts, definition.leaseSeconds ?? DEFAULT_LEASE_SECONDS, retryDelayMs);
 
   while (true) {
@@ -44,12 +47,36 @@ export async function runReliableScheduledJob<T>(
       leaseSeconds: definition.leaseSeconds ?? DEFAULT_LEASE_SECONDS,
     });
     if (!claim.claimed) {
+      const outcome = claim.reason === "concurrency_limited" ? "concurrency_limited" : "duplicate";
+      await definition.repository.recordAuditEvent({
+        agentName: definition.agentName,
+        eventType: `scheduled_job.${outcome}`,
+        outcome: "blocked",
+        metadata: schedulerMetadata({
+          correlationId,
+          jobName: definition.jobName,
+          scheduledJobId: claim.job.id,
+          attemptCount: claim.job.attemptCount,
+        }),
+      });
       return {
-        outcome: claim.reason === "concurrency_limited" ? "concurrency_limited" : "duplicate",
+        outcome,
         job: claim.job,
         attemptCount: claim.job.attemptCount,
       };
     }
+
+    await definition.repository.recordAuditEvent({
+      agentName: definition.agentName,
+      eventType: "scheduled_job.claimed",
+      outcome: "succeeded",
+      metadata: schedulerMetadata({
+        correlationId,
+        jobName: definition.jobName,
+        scheduledJobId: claim.job.id,
+        attemptCount: claim.job.attemptCount,
+      }),
+    });
 
     try {
       const result = await runGovernedJob({
@@ -59,12 +86,25 @@ export async function runReliableScheduledJob<T>(
         reason: definition.reason,
         neededTools: definition.neededTools,
         riskLevel: definition.riskLevel,
+        correlationId,
         execute: definition.execute,
       });
       const job = await definition.repository.completeScheduledJob({
         jobId: claim.job.id,
         status: "completed",
         retryable: false,
+      });
+      await definition.repository.recordAuditEvent({
+        runId: result.run.id,
+        agentName: definition.agentName,
+        eventType: "scheduled_job.completed",
+        outcome: "succeeded",
+        metadata: schedulerMetadata({
+          correlationId,
+          jobName: definition.jobName,
+          scheduledJobId: job.id,
+          attemptCount: job.attemptCount,
+        }),
       });
       return { outcome: "completed", job, attemptCount: job.attemptCount, data: result.data };
     } catch (error) {
@@ -77,11 +117,42 @@ export async function runReliableScheduledJob<T>(
         lastErrorCode: failure.code,
         nextRetryAt: retryable ? new Date(Date.now() + retryDelayMs).toISOString() : undefined,
       });
+      await definition.repository.recordAuditEvent({
+        agentName: definition.agentName,
+        eventType: retryable ? "scheduled_job.retry_scheduled" : "scheduled_job.failed",
+        outcome: retryable ? "blocked" : "failed",
+        metadata: schedulerMetadata({
+          correlationId,
+          jobName: definition.jobName,
+          scheduledJobId: job.id,
+          attemptCount: job.attemptCount,
+          errorCode: failure.code,
+          retryable,
+        }),
+      });
       if (!retryable) throw error;
       await (definition.retry?.delay ?? defaultDelay)(retryDelayMs);
       if (job.status !== "retry_scheduled") throw new Error("Scheduled job retry state was not persisted");
     }
   }
+}
+
+function schedulerMetadata(input: {
+  correlationId: string;
+  jobName: string;
+  scheduledJobId: string;
+  attemptCount: number;
+  errorCode?: string;
+  retryable?: boolean;
+}) {
+  return {
+    correlationId: input.correlationId,
+    jobName: input.jobName,
+    scheduledJobId: input.scheduledJobId,
+    attemptCount: input.attemptCount,
+    ...(input.errorCode ? { errorCode: input.errorCode } : {}),
+    ...(input.retryable !== undefined ? { retryable: input.retryable } : {}),
+  };
 }
 
 function classifySchedulerFailure(error: unknown): { code: string; retriable: boolean } {

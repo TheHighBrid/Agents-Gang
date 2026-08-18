@@ -12,6 +12,7 @@ import {
 import type { AIProvider } from "../ai/contracts";
 import type { RiskLevel } from "../execution/approval-engine";
 import type { ExecutionRepository } from "../execution/repository";
+import { createCorrelationId } from "../observability/correlation";
 
 export type RoutePlan = {
   agent: string;
@@ -89,18 +90,23 @@ export async function runChat({
   provider,
   loadMemory,
   repository,
+  correlationId: suppliedCorrelationId,
 }: {
   message: string;
   provider: AIProvider;
   loadMemory: () => string;
   repository?: ExecutionRepository;
+  correlationId?: string;
 }): Promise<{
   route: RoutePlan;
   output: string;
   provider: string;
   model: string;
+  correlationId: string;
+  runId?: string;
 }> {
   const startedAt = Date.now();
+  const correlationId = createCorrelationId(suppliedCorrelationId);
   const routeResponse = await provider.generate({
     system: orchestratorPrompt,
     userMessage: message,
@@ -120,8 +126,15 @@ export async function runChat({
     riskLevel: route.risk_level,
     inputSummary: `Chat request received (${message.length} characters).`,
   });
-  if (run) {
-    await repository?.recordRoutingDecision({
+  if (run && repository) {
+    await repository.recordAuditEvent({
+      runId: run.id,
+      agentName: route.agent,
+      eventType: "run.correlation",
+      outcome: "succeeded",
+      metadata: { correlationId },
+    });
+    await repository.recordRoutingDecision({
       runId: run.id,
       selectedAgent: route.agent,
       riskLevel: route.risk_level,
@@ -141,8 +154,8 @@ export async function runChat({
       throw new ChatServiceError("Specialist agent returned an empty response");
     }
 
-    if (run) {
-      await repository?.completeAgentRun({
+    if (run && repository) {
+      await repository.completeAgentRun({
         runId: run.id,
         status: "completed",
         outputSummary: `Specialist response completed (${specialistResponse.text.length} characters).`,
@@ -155,10 +168,12 @@ export async function runChat({
       output: specialistResponse.text,
       provider: specialistResponse.provider,
       model: specialistResponse.model,
+      correlationId,
+      ...(run ? { runId: run.id } : {}),
     };
   } catch (error) {
-    if (run) {
-      await repository?.completeAgentRun({
+    if (run && repository) {
+      await repository.completeAgentRun({
         runId: run.id,
         status: "failed",
         errorCode: "chat_execution_failed",

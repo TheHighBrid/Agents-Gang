@@ -9,6 +9,7 @@ describe("structured logger", () => {
 
     logger.record({
       event: "chat.request.completed",
+      correlationId: "corr.chat:001",
       runId: "run-1",
       agent: "product_page_agent",
       route: "product_page_agent",
@@ -21,6 +22,7 @@ describe("structured logger", () => {
     expect(events).toEqual([
       {
         event: "chat.request.completed",
+        correlationId: "corr.chat:001",
         runId: "run-1",
         agent: "product_page_agent",
         route: "product_page_agent",
@@ -29,5 +31,7 @@ describe("structured logger", () => {
         outcome: "succeeded",
       },
     ]);
+    expect(JSON.stringify(events)).not.toContain("secret");
+    expect(JSON.stringify(events)).not.toContain("sensitive request");
   });
 });

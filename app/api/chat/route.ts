@@ -8,13 +8,21 @@ import {
   createExecutionRepository,
   ExecutionRepositoryConfigurationError,
 } from "../../../lib/execution/execution-repository-factory";
+import { resolveCorrelationId } from "../../../lib/observability/correlation";
 import { createStructuredLogger } from "../../../lib/observability/structured-logger";
 import { loadMemory } from "../../../memory/loadMemory";
 
 const MAX_MESSAGE_LENGTH = 10_000;
 
+function jsonResponse(body: Record<string, unknown>, status: number, correlationId: string) {
+  return Response.json(body, {
+    status,
+    headers: { "x-correlation-id": correlationId },
+  });
+}
+
 export async function POST(req: Request) {
-  const runId = crypto.randomUUID();
+  const correlationId = resolveCorrelationId(req);
   const startedAt = Date.now();
   const configuredProvider = process.env.AI_PROVIDER ?? "anthropic";
   const logger = createStructuredLogger();
@@ -23,18 +31,19 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as { message?: unknown };
   } catch {
-    return Response.json({ error: "Request body must be valid JSON" }, { status: 400 });
+    return jsonResponse({ error: "Request body must be valid JSON" }, 400, correlationId);
   }
 
   if (typeof body.message !== "string" || body.message.trim().length === 0) {
-    return Response.json({ error: "Request body must include a non-empty message" }, { status: 400 });
+    return jsonResponse({ error: "Request body must include a non-empty message" }, 400, correlationId);
   }
 
   const message = body.message.trim();
   if (message.length > MAX_MESSAGE_LENGTH) {
-    return Response.json(
+    return jsonResponse(
       { error: `Message must be ${MAX_MESSAGE_LENGTH.toLocaleString()} characters or fewer` },
-      { status: 413 },
+      413,
+      correlationId,
     );
   }
 
@@ -46,10 +55,12 @@ export async function POST(req: Request) {
       provider,
       loadMemory,
       repository,
+      correlationId,
     });
     logger.record({
       event: "chat.request.completed",
-      runId,
+      correlationId: result.correlationId,
+      runId: result.runId,
       agent: result.route.agent,
       route: result.route.agent,
       provider: result.provider,
@@ -58,12 +69,12 @@ export async function POST(req: Request) {
       outcome: "succeeded",
     });
 
-    return Response.json({
+    return jsonResponse({
       route: result.route,
       output: result.output,
       provider: result.provider,
       model: result.model,
-    });
+    }, 200, result.correlationId);
   } catch (error) {
     const status = error instanceof AIProviderError ||
       error instanceof AIProviderConfigurationError ||
@@ -80,12 +91,12 @@ export async function POST(req: Request) {
 
     logger.record({
       event: "chat.request.failed",
-      runId,
+      correlationId,
       provider: configuredProvider,
       durationMs: Date.now() - startedAt,
       outcome: "failed",
     });
 
-    return Response.json({ error: message }, { status });
+    return jsonResponse({ error: message }, status, correlationId);
   }
 }
