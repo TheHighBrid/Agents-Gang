@@ -1,0 +1,77 @@
+name: Environment validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  disabled-features-safe:
+    name: Disabled optional features stay isolated
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate managed staging environment
+        env:
+          AGENTS_GANG_ENVIRONMENT: staging
+          SUPABASE_URL: https://project.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-service-role-fixture-value-long-enough
+          FOUNDER_AUTH_SECRET: ci-founder-auth-fixture-value-at-least-32-characters
+          AI_ENABLED: "false"
+          SHOPIFY_ENABLED: "false"
+          GMAIL_ENABLED: "false"
+          GMAIL_SEND_ENABLED: "false"
+          WEB_SEARCH_ENABLED: "false"
+          INBOX_ALERTS_ENABLED: "false"
+        run: npm run validate:env
+
+  redacted-failure:
+    name: Invalid enabled feature fails without secret leakage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Prove fail-closed redacted diagnostics
+        shell: bash
+        env:
+          AGENTS_GANG_ENVIRONMENT: staging
+          SUPABASE_URL: https://project.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-service-role-fixture-value-long-enough
+          FOUNDER_AUTH_SECRET: ci-founder-auth-fixture-value-at-least-32-characters
+          AI_ENABLED: "true"
+          AI_PROVIDER: anthropic
+          ANTHROPIC_API_KEY: VERY-SENSITIVE-CI-FIXTURE-SECRET
+          SHOPIFY_ENABLED: "false"
+          GMAIL_ENABLED: "false"
+          GMAIL_SEND_ENABLED: "false"
+          WEB_SEARCH_ENABLED: "false"
+          INBOX_ALERTS_ENABLED: "false"
+        run: |
+          set -euo pipefail
+          LONG_MODEL="$(printf 'x%.0s' {1..200})"
+          set +e
+          ANTHROPIC_MODEL="$LONG_MODEL" npm run validate:env > /tmp/environment-validation.out 2>&1
+          status=$?
+          set -e
+          test "$status" -ne 0
+          grep -F "ANTHROPIC_MODEL (out_of_range)" /tmp/environment-validation.out
+          if grep -F "$ANTHROPIC_API_KEY" /tmp/environment-validation.out; then
+            echo "Environment validation must not leak the configured secret"
+            exit 1
+          fi
+          echo "Environment validation failure is redacted and must not leak the configured secret"
