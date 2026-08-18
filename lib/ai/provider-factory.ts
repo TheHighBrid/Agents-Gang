@@ -7,6 +7,10 @@ import { AnthropicProvider } from "./anthropic-provider";
 type ProviderEnvironment = Record<string, string | undefined>;
 
 export function createAIProvider(environment: ProviderEnvironment): AIProvider {
+  if (environment.AI_ENABLED?.trim() === "false") {
+    throw new AIProviderConfigurationError("AI integration is disabled");
+  }
+
   const providerName = environment.AI_PROVIDER ?? "anthropic";
 
   if (providerName !== "anthropic") {
