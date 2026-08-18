@@ -31,6 +31,9 @@ export async function sendGmailDraft(
   input: GmailDraftSendInput,
   options: GmailDraftSendOptions = {},
 ): Promise<GmailDraftSendResult> {
+  if (process.env.GMAIL_ENABLED?.trim() === "false") {
+    throw new Error("Gmail integration is disabled");
+  }
   const parsed = parseDraftSendInput(input);
   const sendEnabled = options.sendEnabled ?? process.env.GMAIL_SEND_ENABLED === "true";
   if (!sendEnabled) throw new Error("Gmail send is not enabled");
