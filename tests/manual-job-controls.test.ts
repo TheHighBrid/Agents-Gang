@@ -79,7 +79,7 @@ describe("protected manual job controls", () => {
     ]));
   });
 
-  test("manual retry advances only an existing retryable scheduler record and preserves its idempotency key", async () => {
+  test("manual retry claims only a due retryable scheduler record and preserves its idempotency key", async () => {
     let now = new Date("2026-08-18T10:00:00.000Z");
     const repository = createInMemoryExecutionRepository({ clock: () => now });
     const execute = vi.fn().mockResolvedValue({ ok: true });
@@ -98,7 +98,7 @@ describe("protected manual job controls", () => {
       status: "retry_scheduled",
       retryable: true,
       lastErrorCode: "shopify_rate_limited",
-      nextRetryAt: "2026-08-18T11:00:00.000Z",
+      nextRetryAt: "2026-08-18T10:05:00.000Z",
     });
 
     now = new Date("2026-08-18T10:05:00.000Z");
@@ -115,8 +115,9 @@ describe("protected manual job controls", () => {
     ]);
   });
 
-  test("rejects non-retryable and exhausted retry requests", async () => {
-    const repository = createInMemoryExecutionRepository();
+  test("rejects early, non-retryable, and exhausted retry requests", async () => {
+    let now = new Date("2026-08-18T10:00:00.000Z");
+    const repository = createInMemoryExecutionRepository({ clock: () => now });
     const controller = createManualJobController({ repository, jobs: [definition()] });
 
     await expect(controller.retry({
@@ -125,7 +126,26 @@ describe("protected manual job controls", () => {
       operatorId: "operator-1",
     })).rejects.toMatchObject({ code: "retry_not_eligible", status: 409 });
 
-    const claim = await repository.claimScheduledJob({
+    const early = await repository.claimScheduledJob({
+      jobName: "job.daily_melato_audit",
+      idempotencyKey: "manual:early:retry-001",
+      agentName: "shopify_ops_agent",
+      maxAttempts: 3,
+      leaseSeconds: 300,
+    });
+    await repository.completeScheduledJob({
+      jobId: early.job.id,
+      status: "retry_scheduled",
+      retryable: true,
+      nextRetryAt: "2026-08-18T11:00:00.000Z",
+    });
+    await expect(controller.retry({
+      jobName: "job.daily_melato_audit",
+      idempotencyKey: "manual:early:retry-001",
+      operatorId: "operator-1",
+    })).rejects.toMatchObject({ code: "retry_not_due", status: 409 });
+
+    const exhausted = await repository.claimScheduledJob({
       jobName: "job.daily_melato_audit",
       idempotencyKey: "manual:exhausted:retry-001",
       agentName: "shopify_ops_agent",
@@ -133,10 +153,10 @@ describe("protected manual job controls", () => {
       leaseSeconds: 300,
     });
     await repository.completeScheduledJob({
-      jobId: claim.job.id,
+      jobId: exhausted.job.id,
       status: "retry_scheduled",
       retryable: true,
-      nextRetryAt: "2026-08-18T10:00:00.000Z",
+      nextRetryAt: now.toISOString(),
     });
 
     await expect(controller.retry({
