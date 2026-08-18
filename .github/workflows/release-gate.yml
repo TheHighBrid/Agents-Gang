@@ -280,6 +280,10 @@ jobs:
             --output release-evidence/release-manifest.json
           cat release-evidence/release-manifest.json
 
+      - name: Require non-PR manifest to be release eligible
+        if: github.event_name != 'pull_request'
+        run: node -e 'const manifest = require("./release-evidence/release-manifest.json"); if (!manifest.releaseEligible) { throw new Error("Release manifest is not eligible for promotion") }'
+
       - name: Upload release evidence manifest
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
