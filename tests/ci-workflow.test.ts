@@ -24,13 +24,14 @@ describe("CI quality gate", () => {
     expect(shopifyWorkflow).toMatch(/run:\s+npm test -- tests\/shopify-tools\.e2e\.test\.ts/);
   });
 
-  test("uses least-privilege permissions, dependency caching, and pinned actions", async () => {
+  test("uses least-privilege permissions, dependency caching, and immutable action pins", async () => {
     const workflow = await readFile(workflowPath, "utf8");
 
     expect(workflow).toMatch(/permissions:\s*\n\s+contents:\s+read/);
     expect(workflow).not.toMatch(/permissions:\s+write-all/);
-    expect(workflow).toMatch(/actions\/checkout@v4/);
-    expect(workflow).toMatch(/actions\/setup-node@v4/);
+    expect(workflow).toMatch(/actions\/checkout@[0-9a-f]{40}/);
+    expect(workflow).toMatch(/actions\/setup-node@[0-9a-f]{40}/);
+    expect(workflow).not.toMatch(/actions\/(checkout|setup-node)@v\d+/);
     expect(workflow).toMatch(/cache:\s+npm/);
   });
 });

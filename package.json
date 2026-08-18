@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "validate:env": "node scripts/validate-env.mjs",
+    "supply-chain:check": "node scripts/check-supply-chain.mjs",
+    "secrets:scan": "node scripts/scan-secrets.mjs",
+    "release:manifest": "node scripts/create-release-manifest.mjs",
     "db:migrate": "node scripts/db-migrate.mjs apply",
     "db:migration:bundle": "node scripts/db-migrate.mjs bundle",
     "db:verify": "node scripts/db-migrate.mjs apply verify"

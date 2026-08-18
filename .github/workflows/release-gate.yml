@@ -1,0 +1,293 @@
+name: Release gate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Optional full commit SHA. Must equal current main to be release eligible.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  repository-quality:
+    name: Release repository quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Full Vitest suite
+        run: npm test
+
+  environment-policy:
+    name: Release environment policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Validate isolated managed environment
+        env:
+          AGENTS_GANG_ENVIRONMENT: staging
+          SUPABASE_URL: https://project.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: release-gate-service-role-fixture-long-enough
+          FOUNDER_AUTH_SECRET: release-gate-founder-auth-fixture-at-least-32-characters
+          AI_ENABLED: "false"
+          SHOPIFY_ENABLED: "false"
+          GMAIL_ENABLED: "false"
+          GMAIL_SEND_ENABLED: "false"
+          WEB_SEARCH_ENABLED: "false"
+          INBOX_ALERTS_ENABLED: "false"
+        run: npm run validate:env
+
+      - name: Prove invalid enabled feature is redacted
+        shell: bash
+        env:
+          AGENTS_GANG_ENVIRONMENT: staging
+          SUPABASE_URL: https://project.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: release-gate-service-role-fixture-long-enough
+          FOUNDER_AUTH_SECRET: release-gate-founder-auth-fixture-at-least-32-characters
+          AI_ENABLED: "true"
+          AI_PROVIDER: anthropic
+          ANTHROPIC_API_KEY: RELEASE-GATE-SENSITIVE-FIXTURE-SECRET
+          SHOPIFY_ENABLED: "false"
+          GMAIL_ENABLED: "false"
+          GMAIL_SEND_ENABLED: "false"
+          WEB_SEARCH_ENABLED: "false"
+          INBOX_ALERTS_ENABLED: "false"
+        run: |
+          set -euo pipefail
+          LONG_MODEL="$(printf 'x%.0s' {1..200})"
+          set +e
+          ANTHROPIC_MODEL="$LONG_MODEL" npm run validate:env > /tmp/release-env.out 2>&1
+          status=$?
+          set -e
+          test "$status" -ne 0
+          grep -F "ANTHROPIC_MODEL (out_of_range)" /tmp/release-env.out
+          if grep -F "$ANTHROPIC_API_KEY" /tmp/release-env.out; then
+            echo "Release environment diagnostics exposed a configured secret"
+            exit 1
+          fi
+
+  migration-fresh:
+    name: Release fresh schema proof
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: release_fresh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d release_fresh"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Build fresh migration bundle
+        run: node scripts/db-migrate.mjs bundle fresh > /tmp/release-fresh.sql
+
+      - name: Apply and verify fresh schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGRES_ID="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_ID"
+          docker exec -i "$POSTGRES_ID" psql -U postgres -d release_fresh -X -v ON_ERROR_STOP=1 < /tmp/release-fresh.sql 2>&1 | tee /tmp/release-fresh.out
+          grep -F "Agents-Gang schema verification passed" /tmp/release-fresh.out
+
+  migration-upgrade:
+    name: Release governed-schema upgrade proof
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: release_upgrade
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d release_upgrade"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Load governed schema baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGRES_ID="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_ID"
+          docker exec -i "$POSTGRES_ID" psql -U postgres -d release_upgrade -X -v ON_ERROR_STOP=1 < db/fixtures/20260815_governed_execution_baseline.sql
+          docker exec "$POSTGRES_ID" psql -U postgres -d release_upgrade -X -v ON_ERROR_STOP=1 -c "insert into approval_requests (agent_name, action_type, risk_level, status) values ('release-gate', 'shopify.products.read', 1, 'approved');"
+
+      - name: Build governed schema upgrade bundle
+        run: node scripts/db-migrate.mjs bundle upgrade --from 20260815_governed_execution > /tmp/release-upgrade.sql
+
+      - name: Apply and verify governed schema upgrade
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGRES_ID="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_ID"
+          docker exec -i "$POSTGRES_ID" psql -U postgres -d release_upgrade -X -v ON_ERROR_STOP=1 < /tmp/release-upgrade.sql 2>&1 | tee /tmp/release-upgrade.out
+          grep -F "Agents-Gang baseline 20260815_governed_execution verified" /tmp/release-upgrade.out
+          grep -F "Agents-Gang schema verification passed" /tmp/release-upgrade.out
+          docker exec "$POSTGRES_ID" psql -U postgres -d release_upgrade -X -v ON_ERROR_STOP=1 -Atc "select count(*) from approval_requests where agent_name = 'release-gate' and status = 'approved'" | grep -Fx "1"
+
+  dependency-policy:
+    name: Release dependency and lockfile policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exactly from lockfile
+        run: npm ci
+
+      - name: Verify workflow pins and lockfile policy
+        run: node scripts/check-supply-chain.mjs
+
+      - name: Audit dependencies for high or critical vulnerabilities
+        run: npm audit --audit-level=high
+
+  secret-policy:
+    name: Release committed secret policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Scan tracked files for committed secrets
+        run: node scripts/scan-secrets.mjs
+
+      - name: Re-verify immutable workflow action refs
+        run: node scripts/check-supply-chain.mjs
+
+  release-manifest:
+    name: Release provenance manifest
+    needs:
+      - repository-quality
+      - environment-policy
+      - migration-fresh
+      - migration-upgrade
+      - dependency-policy
+      - secret-policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+
+      - name: Require promotable candidate to equal current main
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
+      - name: Generate release evidence manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$(git rev-parse HEAD)"
+          node scripts/create-release-manifest.mjs \
+            --sha "$CANDIDATE_SHA" \
+            --event "$GITHUB_EVENT_NAME" \
+            --ref "$GITHUB_REF_NAME" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output release-evidence/release-manifest.json
+          cat release-evidence/release-manifest.json
+
+      - name: Require non-PR manifest to be release eligible
+        if: github.event_name != 'pull_request'
+        run: node -e 'const manifest = require("./release-evidence/release-manifest.json"); if (!manifest.releaseEligible) { throw new Error("Release manifest is not eligible for promotion") }'
+
+      - name: Upload release evidence manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-gate-evidence-${{ github.run_id }}
+          path: release-evidence/release-manifest.json
+          retention-days: 90
+          if-no-files-found: error
