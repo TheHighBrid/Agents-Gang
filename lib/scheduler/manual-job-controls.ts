@@ -37,7 +37,7 @@ export type ManualJobDefinition<T = unknown> = {
   maxAttempts?: number;
   leaseSeconds?: number;
   retryDelayMs?: number;
-  execute: (context: ToolExecutionContext) => Promise<T> | T;
+  execute: (context: ToolExecutionContext) => Promise<T>;
 };
 
 export type ManualJobControlInput = {
