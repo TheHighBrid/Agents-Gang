@@ -285,7 +285,7 @@ jobs:
         run: node -e 'const manifest = require("./release-evidence/release-manifest.json"); if (!manifest.releaseEligible) { throw new Error("Release manifest is not eligible for promotion") }'
 
       - name: Upload release evidence manifest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-gate-evidence-${{ github.run_id }}
           path: release-evidence/release-manifest.json
