@@ -41,12 +41,27 @@ All rows are intentionally seeded as `Planned`. Replace `Planned` only after the
 | RC-02 | Approval list/detail/decision endpoints are authenticated, authorized, audited, rate-limited, and abuse-tested. | C1-01, C1-03, C1-04, C1-06 | Authorization matrix, abuse regressions, audit proof, rate-limit evidence. | Planned | Add links in this row to accepted C1 control-plane evidence and security review. |
 | RC-03 | Database migrations are applied and rehearsed in a production-like environment. | C5-01 | Fresh/upgrade rehearsal report with schema, index, constraint, and rollback precondition checks. | Planned | Add the completed Migration rehearsal record and staging run links here. |
 | RC-04 | Fresh-install and upgrade deployment paths pass automated verification. | C5-01, C5-03 | Automated verification output for both paths and retained release artifact evidence. | Planned | Add migration verification and release workflow links here. |
-| RC-05 | Dashboard shows durable operational state and handles empty, loading, error, expired, consumed, and conflict cases. | C2-01, C2-02, C2-03 | UI/API acceptance tests, accessibility checks, screenshots or walkthrough. | Planned | Add accepted Chapter 2 evidence and founder workflow artifacts here. |
+| RC-05 | Dashboard shows durable operational state and handles empty, loading, error, expired, consumed, and conflict cases. | C2-01, C2-02, C2-03, C2-04 | UI/API acceptance tests, accessibility checks, screenshots or walkthrough. | Planned | C2-04 automated/operator contract: `docs/FOUNDER_WORKFLOW_ACCEPTANCE.md` and EV-C2-04-01. Keep Planned until required staging screenshots/walkthrough and independent review are attached. |
 | RC-06 | Scheduled jobs are idempotent, retry-safe, observable, and controllable. | C3-05, C4-01, C4-02, C4-03, C4-04 | Duplicate-delivery tests, retry taxonomy, correlation proof, operator controls, job-health view. | Planned | Add accepted Chapter 4 scheduler/observability evidence here. |
 | RC-07 | CI required checks cover lint, typecheck, build, tests, secret checks, and dependency checks. | C0-01, C5-03 | Required workflow runs and branch-protection/release-gate evidence. | Planned | Add CI workflow run and release-gate links here. |
 | RC-08 | Staging completes the defined soak with no unresolved critical/high defects. | C5-04 | Completed Staging soak record, defect register, and disposition of all critical/high findings. | Planned | Add the completed staging soak record and linked defect evidence here. |
 | RC-09 | Monitoring alerts, runbooks, rollback, and mutation-disable procedures are tested. | C4-03, C5-05 | Alert exercise, rollback rehearsal, mutation-disable rehearsal, operator runbook review. | Planned | Add rehearsal output and accepted runbook links here. |
 | RC-10 | Founder explicitly approves the deployment window and post-deploy verification plan. | C5-04, C5-06 | Founder UAT result plus explicit go/no-go decision-log entry. | Planned | Add the completed Founder UAT record and decision-log entry here. |
+
+## Task evidence records
+
+### EV-C2-04-01 - Founder workflow acceptance suite
+- Status: In progress
+- Evidence owner: SOL 5.6
+- Verification date/time (UTC): 2026-08-18
+- Scope: Deterministic sandbox acceptance for read, governed draft/high-risk preparation, approve/reject, one-time consumption and replay block, injected external failure, safe dashboard/audit inspection, and founder-session authorization behavior.
+- Automated evidence: `tests/founder-workflow-acceptance.test.ts`.
+- Operator evidence contract: `docs/FOUNDER_WORKFLOW_ACCEPTANCE.md`.
+- Red evidence: PR #57 quality-gate run `32089456701` passed install, lint, typecheck, and build; the automated governance scenario passed and the documentation/evidence contract failed because `docs/FOUNDER_WORKFLOW_ACCEPTANCE.md` did not yet exist.
+- External-effect safety: fixture-only in-memory execution; no network call, production credential, customer data, or real mutation.
+- Authorization safety: automated coverage rejects a client-supplied founder role and accepts only a signed founder session; operator instructions prohibit repository-direct bypasses.
+- Remaining proof before this record can be marked `Verified`: exact-head green full quality gate and independent Codex/Manus review. Staging screenshots remain separate RC-05/C5-04 evidence and are not implied by this record.
+- Evidence location(s): Issue #22, PR #57, `tests/founder-workflow-acceptance.test.ts`, `docs/FOUNDER_WORKFLOW_ACCEPTANCE.md`.
 
 ## Chapter acceptance index
 
@@ -56,7 +71,7 @@ Use this table as the chapter-level roll-up. Do not mark a chapter `Verified` un
 |---|---|---|---|
 | Chapter 0 - Program Control | Published planning controls plus full CI quality gate. | In progress | Issues #10 to #12 and their accepted PR/CI evidence. |
 | Chapter 1 - Approval Control Plane | Authenticated/authorized approval APIs, lifecycle enforcement, policy registry, abuse tests. | Planned | Issues #13 to #18 and corresponding PR/CI/security evidence. |
-| Chapter 2 - Founder Operations Surface | Persisted approvals/dashboard workflows with accessibility and acceptance proof. | Planned | Issues #19 to #22 and corresponding UI/API evidence. |
+| Chapter 2 - Founder Operations Surface | Persisted approvals/dashboard workflows with accessibility and acceptance proof. | In progress | Issues #19 to #22; C2-04 evidence begins at EV-C2-04-01 and RC-05 remains Planned pending staging walkthrough evidence. |
 | Chapter 3 - Governed Integration Fabric | Enabled adapters and jobs governed by the common execution contract. | Planned | Issues #23 to #27 and sandbox/integration evidence. |
 | Chapter 4 - Scheduling and Observability | Durable scheduler, retry/idempotency, correlation, alerts, job-health UX. | Planned | Issues #28 to #31 and operational test evidence. |
 | Chapter 5 - Deployment Readiness and Launch | Migration, environment, release gate, staging, runbooks, explicit go/no-go. | Planned | Issues #32 to #37, staging evidence, decision log, deployment verification. |
