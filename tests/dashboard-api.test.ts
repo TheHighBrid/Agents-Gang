@@ -3,7 +3,7 @@ import { createInMemoryExecutionRepository } from "../lib/execution/repository";
 import { getDashboardSnapshotResponse } from "../lib/dashboard/dashboard-api";
 
 describe("dashboard snapshot", () => {
-  test("returns persisted execution records in one response", async () => {
+  test("returns persisted execution records with safe run correlation in one response", async () => {
     const repository = createInMemoryExecutionRepository({ idFactory: (() => {
       let index = 0;
       return () => `record-${++index}`;
@@ -35,6 +35,13 @@ describe("dashboard snapshot", () => {
     await repository.recordAuditEvent({
       runId: run.id,
       agentName: "shopify_ops_agent",
+      eventType: "run.correlation",
+      outcome: "succeeded",
+      metadata: { correlationId: "corr.dashboard:run-001", payload: "must-not-render" },
+    });
+    await repository.recordAuditEvent({
+      runId: run.id,
+      agentName: "shopify_ops_agent",
       toolName: "shopify.products.read",
       riskLevel: 1,
       eventType: "tool.completed",
@@ -47,9 +54,11 @@ describe("dashboard snapshot", () => {
 
     expect(response.status).toBe(200);
     expect(body.runs).toHaveLength(1);
+    expect(body.runs[0]).toMatchObject({ id: run.id, correlationId: "corr.dashboard:run-001" });
     expect(body.routingDecisions).toHaveLength(1);
     expect(body.toolCalls).toHaveLength(1);
-    expect(body.auditEvents).toHaveLength(1);
+    expect(body.auditEvents).toHaveLength(2);
     expect(body.approvals).toEqual([]);
+    expect(JSON.stringify(body)).not.toContain("must-not-render");
   });
 });
