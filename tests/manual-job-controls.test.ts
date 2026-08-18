@@ -116,7 +116,7 @@ describe("protected manual job controls", () => {
   });
 
   test("rejects early, non-retryable, and exhausted retry requests", async () => {
-    let now = new Date("2026-08-18T10:00:00.000Z");
+    const now = new Date("2026-08-18T10:00:00.000Z");
     const repository = createInMemoryExecutionRepository({ clock: () => now });
     const controller = createManualJobController({ repository, jobs: [definition()] });
 
