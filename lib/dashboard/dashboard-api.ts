@@ -6,13 +6,14 @@ import type {
   RoutingDecisionRecord,
   ToolCallRecord,
 } from "../execution/repository";
+import { isValidCorrelationId } from "../observability/correlation";
 
 const DASHBOARD_RESULT_LIMIT = 50;
 
 export type DashboardRun = Pick<
   AgentRunRecord,
   "id" | "agentName" | "status" | "riskLevel" | "createdAt" | "completedAt" | "errorCode" | "durationMs"
->;
+> & { correlationId?: string };
 
 export type DashboardRoutingDecision = Pick<
   RoutingDecisionRecord,
@@ -50,9 +51,10 @@ export async function getDashboardSnapshotResponse(repository: ExecutionReposito
     repository.listAuditEvents(),
     repository.listApprovals(),
   ]);
+  const correlationByRunId = buildCorrelationIndex(auditEvents);
 
   const snapshot: DashboardSnapshot = {
-    runs: newestFirst(runs.map(toDashboardRun), (run) => run.createdAt),
+    runs: newestFirst(runs.map((run) => toDashboardRun(run, correlationByRunId.get(run.id))), (run) => run.createdAt),
     routingDecisions: newestFirst(routingDecisions.map(toDashboardRoutingDecision), (decision) => decision.createdAt),
     toolCalls: newestFirst(toolCalls.map(toDashboardToolCall), (toolCall) => toolCall.createdAt),
     auditEvents: newestFirst(auditEvents.map(toDashboardAuditEvent), (event) => event.createdAt),
@@ -62,7 +64,17 @@ export async function getDashboardSnapshotResponse(repository: ExecutionReposito
   return Response.json(snapshot);
 }
 
-function toDashboardRun(run: AgentRunRecord): DashboardRun {
+function buildCorrelationIndex(auditEvents: AuditEventRecord[]) {
+  const index = new Map<string, string>();
+  for (const event of auditEvents) {
+    if (event.eventType !== "run.correlation" || !event.runId) continue;
+    const correlationId = event.metadata.correlationId;
+    if (isValidCorrelationId(correlationId)) index.set(event.runId, correlationId);
+  }
+  return index;
+}
+
+function toDashboardRun(run: AgentRunRecord, correlationId?: string): DashboardRun {
   return {
     id: run.id,
     agentName: run.agentName,
@@ -72,6 +84,7 @@ function toDashboardRun(run: AgentRunRecord): DashboardRun {
     ...(run.completedAt ? { completedAt: run.completedAt } : {}),
     ...(run.errorCode ? { errorCode: run.errorCode } : {}),
     ...(run.durationMs !== undefined ? { durationMs: run.durationMs } : {}),
+    ...(correlationId ? { correlationId } : {}),
   };
 }
 
