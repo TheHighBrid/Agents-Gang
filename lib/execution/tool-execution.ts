@@ -76,22 +76,27 @@ export async function executeTool<Input, Output>(
   tool: ToolDefinition<Input, Output>,
   rawInput: unknown,
 ): Promise<ToolSuccess<Output> | ToolFailure> {
+  // Enforce governance at the actual execution boundary as well as at tool-definition time.
+  // Callers cannot bypass policy by constructing a ToolDefinition directly.
+  const policy = assertToolPolicy(tool);
   const approval = context.approvalId
     ? await context.repository.getApproval(context.approvalId)
     : undefined;
-  const matchingApproval = approval?.actionType === tool.name ? approval : undefined;
-  const gate = evaluateApprovalGate({
-    riskLevel: tool.riskLevel,
-    approval: matchingApproval,
-  });
+  const matchingApproval = approval?.actionType === policy.actionType ? approval : undefined;
+  const gate = policy.approvalRequired
+    ? evaluateApprovalGate({
+      riskLevel: policy.riskLevel,
+      approval: matchingApproval,
+    })
+    : { allowed: true as const };
 
   if (!gate.allowed) {
     await context.repository.recordToolCall({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      capability: tool.capability,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      capability: policy.capability,
+      riskLevel: policy.riskLevel,
       approvalId: context.approvalId,
       outcome: "blocked",
       errorCode: gate.reason,
@@ -99,8 +104,8 @@ export async function executeTool<Input, Output>(
     await context.repository.recordAuditEvent({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      riskLevel: policy.riskLevel,
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "blocked",
@@ -124,9 +129,9 @@ export async function executeTool<Input, Output>(
     await context.repository.recordToolCall({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      capability: tool.capability,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      capability: policy.capability,
+      riskLevel: policy.riskLevel,
       approvalId: context.approvalId,
       outcome: "failed",
       errorCode: "invalid_input",
@@ -146,9 +151,9 @@ export async function executeTool<Input, Output>(
     await context.repository.recordToolCall({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      capability: tool.capability,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      capability: policy.capability,
+      riskLevel: policy.riskLevel,
       approvalId: matchingApproval.id,
       outcome: "blocked",
       errorCode: "approval_required",
@@ -169,17 +174,17 @@ export async function executeTool<Input, Output>(
     await context.repository.recordToolCall({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      capability: tool.capability,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      capability: policy.capability,
+      riskLevel: policy.riskLevel,
       approvalId: context.approvalId,
       outcome: "succeeded",
     });
     await context.repository.recordAuditEvent({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      riskLevel: policy.riskLevel,
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "succeeded",
@@ -192,9 +197,9 @@ export async function executeTool<Input, Output>(
     await context.repository.recordToolCall({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      capability: tool.capability,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      capability: policy.capability,
+      riskLevel: policy.riskLevel,
       approvalId: context.approvalId,
       outcome: "failed",
       errorCode: failure.errorCode,
@@ -202,8 +207,8 @@ export async function executeTool<Input, Output>(
     await context.repository.recordAuditEvent({
       runId: context.runId,
       agentName: context.agentName,
-      toolName: tool.name,
-      riskLevel: tool.riskLevel,
+      toolName: policy.actionType,
+      riskLevel: policy.riskLevel,
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "failed",
