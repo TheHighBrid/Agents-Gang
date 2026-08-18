@@ -13,11 +13,12 @@ describe("committed secret scanner", () => {
   });
 
   test("detects private keys and live-looking Shopify/GitHub/AWS credentials", () => {
+    const privateKeyHeader = ["-----BEGIN", "PRIVATE", "KEY-----"].join(" ");
     const content = [
       `shopify=${`shpat_${"B".repeat(32)}`}`,
       `github=${`ghp_${"C".repeat(36)}`}`,
       `aws=AKIA${"D".repeat(16)}`,
-      "-----BEGIN PRIVATE KEY-----",
+      privateKeyHeader,
     ].join("\n");
     const findings = scanContentForSecrets("fixture.env", content);
     expect(findings.map((finding) => finding.rule)).toEqual([
