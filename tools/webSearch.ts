@@ -38,6 +38,9 @@ export async function webSearch(query: string, options: WebSearchOptions = {}): 
   if (normalizedQuery.length > 200) {
     throw new Error("Search query must be 200 characters or fewer");
   }
+  if (process.env.WEB_SEARCH_ENABLED?.trim() === "false") {
+    throw new WebSearchConfigurationError("Web search integration is disabled");
+  }
 
   const apiKey = (options.apiKey ?? process.env.BRAVE_SEARCH_API_KEY ?? "").trim();
   if (!apiKey) {
