@@ -1,6 +1,7 @@
 import type { AgentRunRecord, ExecutionRepository } from "../lib/execution/repository";
 import type { RiskLevel } from "../lib/execution/approval-engine";
 import type { ToolExecutionContext } from "../lib/execution/tool-execution";
+import { createCorrelationId } from "../lib/observability/correlation";
 
 export type GovernedJobDefinition<T> = {
   repository: ExecutionRepository;
@@ -9,17 +10,20 @@ export type GovernedJobDefinition<T> = {
   reason: string;
   neededTools: string[];
   riskLevel?: RiskLevel;
+  correlationId?: string;
   execute: (context: ToolExecutionContext) => Promise<T>;
 };
 
 export type GovernedJobResult<T> = {
   run: AgentRunRecord;
   data: T;
+  correlationId: string;
 };
 
 export async function runGovernedJob<T>(definition: GovernedJobDefinition<T>): Promise<GovernedJobResult<T>> {
   const startedAt = Date.now();
   const riskLevel = definition.riskLevel ?? 1;
+  const correlationId = createCorrelationId(definition.correlationId);
   const run = await definition.repository.createAgentRun({
     agentName: definition.agentName,
     provider: "scheduled",
@@ -27,6 +31,14 @@ export async function runGovernedJob<T>(definition: GovernedJobDefinition<T>): P
     routeAgent: definition.agentName,
     riskLevel,
     inputSummary: definition.inputSummary,
+  });
+
+  await definition.repository.recordAuditEvent({
+    runId: run.id,
+    agentName: definition.agentName,
+    eventType: "run.correlation",
+    outcome: "succeeded",
+    metadata: { correlationId },
   });
 
   await definition.repository.recordRoutingDecision({
@@ -43,6 +55,7 @@ export async function runGovernedJob<T>(definition: GovernedJobDefinition<T>): P
       repository: definition.repository,
       runId: run.id,
       agentName: definition.agentName,
+      correlationId,
     });
     const completedRun = await definition.repository.completeAgentRun({
       runId: run.id,
@@ -50,7 +63,7 @@ export async function runGovernedJob<T>(definition: GovernedJobDefinition<T>): P
       outputSummary: "Scheduled job completed successfully.",
       durationMs: Date.now() - startedAt,
     });
-    return { run: completedRun, data };
+    return { run: completedRun, data, correlationId };
   } catch (error) {
     await definition.repository.completeAgentRun({
       runId: run.id,
