@@ -4,6 +4,8 @@ import { GET, POST } from "../app/api/jobs/route";
 
 const originalSecret = process.env.FOUNDER_AUTH_SECRET;
 const originalRevoked = process.env.FOUNDER_REVOKED_SESSION_IDS;
+const originalSupabaseUrl = process.env.SUPABASE_URL;
+const originalSupabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function token(role: FounderSessionClaims["role"] = "operator") {
   const now = Math.floor(Date.now() / 1000);
@@ -28,11 +30,16 @@ function request(method: "GET" | "POST", bearer?: string, body?: unknown, header
   });
 }
 
+function restoreEnvironment(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 afterEach(() => {
-  if (originalSecret === undefined) delete process.env.FOUNDER_AUTH_SECRET;
-  else process.env.FOUNDER_AUTH_SECRET = originalSecret;
-  if (originalRevoked === undefined) delete process.env.FOUNDER_REVOKED_SESSION_IDS;
-  else process.env.FOUNDER_REVOKED_SESSION_IDS = originalRevoked;
+  restoreEnvironment("FOUNDER_AUTH_SECRET", originalSecret);
+  restoreEnvironment("FOUNDER_REVOKED_SESSION_IDS", originalRevoked);
+  restoreEnvironment("SUPABASE_URL", originalSupabaseUrl);
+  restoreEnvironment("SUPABASE_SERVICE_ROLE_KEY", originalSupabaseServiceRoleKey);
 });
 
 describe("protected manual job API", () => {
