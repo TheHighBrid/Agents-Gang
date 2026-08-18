@@ -6,6 +6,9 @@ type RunStatus = "running" | "completed" | "failed" | "blocked";
 type Outcome = "blocked" | "succeeded" | "failed";
 type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "consumed";
 type DashboardView = "attention" | "all";
+type ScheduledJobStatus = "running" | "retry_scheduled" | "completed" | "failed";
+type JobAction = "none" | "wait_for_completion" | "wait_for_retry" | "inspect_failure";
+type AlertSeverity = "warning" | "critical";
 
 type DashboardRun = {
   id: string;
@@ -16,6 +19,7 @@ type DashboardRun = {
   completedAt?: string;
   errorCode?: string;
   durationMs?: number;
+  correlationId?: string;
 };
 
 type DashboardRoutingDecision = {
@@ -67,12 +71,49 @@ type DashboardApproval = {
   expiresAt?: string;
 };
 
+type DashboardScheduledJob = {
+  id: string;
+  jobName: string;
+  status: ScheduledJobStatus;
+  attemptCount: number;
+  maxAttempts: number;
+  retryable: boolean;
+  lastErrorCode?: string;
+  nextRetryAt?: string;
+  updatedAt: string;
+  completedAt?: string;
+  correlationId?: string;
+  recommendedAction: JobAction;
+};
+
+type OperationalAlert = {
+  code: string;
+  severity: AlertSeverity;
+  count: number;
+  threshold: number;
+  owner: string;
+  nextAction: string;
+};
+
+type OperationalHealth = {
+  windowMinutes: number;
+  metrics: {
+    failedJobs: number;
+    providerTimeouts: number;
+    persistenceTimeouts: number;
+    blockedActions: number;
+  };
+  alerts: OperationalAlert[];
+};
+
 type Snapshot = {
   runs: DashboardRun[];
   routingDecisions: DashboardRoutingDecision[];
   toolCalls: DashboardToolCall[];
   auditEvents: DashboardAuditEvent[];
   approvals: DashboardApproval[];
+  scheduledJobs?: DashboardScheduledJob[];
+  operationalHealth?: OperationalHealth;
 };
 
 export default function DashboardPage() {
@@ -130,9 +171,12 @@ export default function DashboardPage() {
   }
 
   const dashboard = snapshot;
+  const scheduledJobs = dashboard?.scheduledJobs ?? [];
+  const operationalHealth = dashboard?.operationalHealth ?? null;
   const pendingApprovals = dashboard?.approvals.filter((approval) => approval.status === "pending") ?? [];
   const failedRuns = dashboard?.runs.filter((run) => run.status === "failed" || run.status === "blocked") ?? [];
   const blockedActions = dashboard?.toolCalls.filter((toolCall) => toolCall.outcome === "blocked" && toolCall.riskLevel >= 3) ?? [];
+  const unhealthyJobs = scheduledJobs.filter((job) => job.status === "failed" || job.status === "retry_scheduled");
   const attentionRunIds = new Set([
     ...failedRuns.map((run) => run.id),
     ...blockedActions.map((toolCall) => toolCall.runId),
@@ -164,6 +208,8 @@ export default function DashboardPage() {
     pendingApprovals: pendingApprovals.length,
     failedRuns: failedRuns.length,
     blockedActions: blockedActions.length,
+    unhealthyJobs: unhealthyJobs.length,
+    activeAlerts: operationalHealth?.alerts.length,
   } : null;
 
   return (
@@ -172,7 +218,7 @@ export default function DashboardPage() {
         <div>
           <p className="eyebrow">Melato OS / Operations</p>
           <h1>Operations dashboard</h1>
-          <p className="lede">Find failures, blocked high-risk actions, pending approvals, and their correlated governance records without opening the database.</p>
+          <p className="lede">Find failures, blocked high-risk actions, pending approvals, job health, and their correlated governance records without opening the database.</p>
         </div>
         <div className="header-mark" aria-hidden="true">OS</div>
       </header>
@@ -223,6 +269,73 @@ export default function DashboardPage() {
               <Metric label="Failed runs" value={counts.failedRuns} detail="failed or blocked runs" />
               <Metric label="Blocked actions" value={counts.blockedActions} detail="risk 3+ actions blocked" />
               <Metric label="Running now" value={counts.running} detail="persisted active runs" />
+              <Metric label="Jobs needing attention" value={counts.unhealthyJobs} detail="failed or waiting to retry" />
+              <Metric label="Operational alerts" value={counts.activeAlerts ?? "N/A"} detail={operationalHealth ? `last ${operationalHealth.windowMinutes} minutes` : "telemetry unavailable"} />
+            </section>
+
+            <section className="dashboard-section" aria-labelledby="job-health-heading">
+              <div className="queue-toolbar">
+                <div>
+                  <p className="section-kicker">Scheduler</p>
+                  <h2 id="job-health-heading">Job health</h2>
+                  <p className="muted">Latest durable scheduler state, retry posture, failure class, and safe next action.</p>
+                </div>
+                <span className="dashboard-count">{scheduledJobs.length} recorded</span>
+              </div>
+              {scheduledJobs.length === 0 ? (
+                <EmptyDashboard text="No scheduled job history is available yet." />
+              ) : (
+                <div className="operation-list">
+                  {scheduledJobs.slice(0, 10).map((job) => (
+                    <OperationRow
+                      key={job.id}
+                      title={formatAction(job.jobName)}
+                      status={job.status}
+                      statusTone={jobStatusTone(job.status)}
+                    >
+                      <span>Status: {formatAction(job.status)}</span>
+                      <span>Attempt {job.attemptCount} of {job.maxAttempts}</span>
+                      <span>{job.retryable ? "Retryable when policy allows" : "Not currently retryable"}</span>
+                      {job.lastErrorCode && <span>Failure: {job.lastErrorCode}</span>}
+                      {job.nextRetryAt && <span>Next retry: <time dateTime={job.nextRetryAt}>{formatDate(job.nextRetryAt)}</time></span>}
+                      <span className="run-id">Correlation: {job.correlationId ?? "Correlation unavailable"}</span>
+                      <strong>Next action: {jobActionCopy(job.recommendedAction)}</strong>
+                      <time dateTime={job.updatedAt}>Updated {formatDate(job.updatedAt)}</time>
+                    </OperationRow>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="dashboard-section attention-section" aria-labelledby="operational-alerts-heading">
+              <div className="queue-toolbar">
+                <div>
+                  <p className="section-kicker">Observability</p>
+                  <h2 id="operational-alerts-heading">Operational alerts</h2>
+                  <p className="muted">Deterministic alerts from the protected 15-minute health policy.</p>
+                </div>
+              </div>
+              {!operationalHealth ? (
+                <p className="empty-inline" role="status">Operational alert telemetry is unavailable.</p>
+              ) : operationalHealth.alerts.length === 0 ? (
+                <p className="empty-inline" role="status">No operational alerts in the last {operationalHealth.windowMinutes} minutes.</p>
+              ) : (
+                <div className="operation-list">
+                  {operationalHealth.alerts.map((alert) => (
+                    <OperationRow
+                      key={alert.code}
+                      title={formatAction(alert.code)}
+                      status={alert.severity}
+                      statusTone={alert.severity === "critical" ? "danger" : "pending"}
+                    >
+                      <span>Severity: {formatAction(alert.severity)}</span>
+                      <span>{alert.count} observed / threshold {alert.threshold}</span>
+                      <span>Owner: {formatAction(alert.owner)}</span>
+                      <strong>Next action: {alert.nextAction}</strong>
+                    </OperationRow>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section className="dashboard-section attention-section" aria-labelledby="attention-heading">
@@ -255,6 +368,7 @@ export default function DashboardPage() {
                       <span className="run-id">Run ID: {run.id}</span>
                       <span>Risk {run.riskLevel}</span>
                       {run.errorCode && <span>Error: {run.errorCode}</span>}
+                      {run.correlationId && <span>Correlation: {run.correlationId}</span>}
                       <time dateTime={run.createdAt}>{formatDate(run.createdAt)}</time>
                     </OperationRow>
                   ))}
@@ -285,6 +399,7 @@ export default function DashboardPage() {
                     <div className="run-main">
                       <strong>{run.agentName}</strong>
                       <span className="run-id">Run ID: {run.id}</span>
+                      {run.correlationId && <span>Correlation: {run.correlationId}</span>}
                       {run.errorCode && <span>Error: {run.errorCode}</span>}
                     </div>
                     <div className="run-meta">
@@ -337,7 +452,7 @@ export default function DashboardPage() {
           <div className="empty-state">
             <span className="empty-icon" aria-hidden="true">◌</span>
             <h3>Operations are private by default</h3>
-            <p>Authenticate above to inspect safe persisted run, routing, tool, approval, and audit state.</p>
+            <p>Authenticate above to inspect safe persisted run, routing, tool, approval, job-health, and audit state.</p>
           </div>
         ) : null}
       </section>
@@ -345,7 +460,7 @@ export default function DashboardPage() {
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: number; detail: string }) {
+function Metric({ label, value, detail }: { label: string; value: number | string; detail: string }) {
   return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>;
 }
 
@@ -391,6 +506,20 @@ function statusClass(status: string) {
 
 function outcomeTone(outcome: Outcome): "danger" | "success" | "neutral" {
   return outcome === "succeeded" ? "success" : outcome === "failed" || outcome === "blocked" ? "danger" : "neutral";
+}
+
+function jobStatusTone(status: ScheduledJobStatus): "pending" | "danger" | "success" | "neutral" {
+  if (status === "completed") return "success";
+  if (status === "failed") return "danger";
+  if (status === "retry_scheduled") return "pending";
+  return "neutral";
+}
+
+function jobActionCopy(action: JobAction) {
+  if (action === "none") return "No action required.";
+  if (action === "wait_for_completion") return "Job is running. Do not start a duplicate while its lease is active.";
+  if (action === "wait_for_retry") return "Wait for the scheduled retry window. Do not force an early retry.";
+  return "Inspect the correlation trail and failure code before deciding whether to retry.";
 }
 
 function formatAction(action: string) {
