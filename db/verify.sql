@@ -80,5 +80,54 @@ begin
     raise exception 'Schema verification failed: approval_requests consumed status constraint is missing';
   end if;
 
+  if not exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.scheduled_jobs'::regclass
+      and c.contype = 'c'
+      and pg_get_constraintdef(c.oid) like '%retry_scheduled%'
+      and pg_get_constraintdef(c.oid) like '%failed%'
+  ) then
+    raise exception 'Schema verification failed: scheduled_jobs status constraint is incomplete';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.scheduled_jobs'::regclass
+      and c.contype = 'u'
+      and pg_get_constraintdef(c.oid) like '%idempotency_key%'
+  ) then
+    raise exception 'Schema verification failed: scheduled_jobs idempotency uniqueness is missing';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.routing_decisions'::regclass
+      and c.confrelid = 'public.agent_runs'::regclass
+      and c.contype = 'f'
+  ) then
+    raise exception 'Schema verification failed: routing_decisions run relationship is missing';
+  end if;
+  if not exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.tool_calls'::regclass
+      and c.confrelid = 'public.agent_runs'::regclass
+      and c.contype = 'f'
+  ) then
+    raise exception 'Schema verification failed: tool_calls run relationship is missing';
+  end if;
+  if not exists (
+    select 1
+    from pg_constraint c
+    where c.conrelid = 'public.audit_events'::regclass
+      and c.confrelid = 'public.agent_runs'::regclass
+      and c.contype = 'f'
+  ) then
+    raise exception 'Schema verification failed: audit_events run relationship is missing';
+  end if;
+
   raise notice 'Agents-Gang schema verification passed';
 end $$;
