@@ -74,6 +74,47 @@ export type CompleteAgentRunInput = {
   durationMs?: number;
 };
 
+export type ScheduledJobStatus = "running" | "retry_scheduled" | "completed" | "failed";
+
+export type ScheduledJobRecord = {
+  id: string;
+  jobName: string;
+  idempotencyKey: string;
+  agentName: string;
+  status: ScheduledJobStatus;
+  attemptCount: number;
+  maxAttempts: number;
+  retryable: boolean;
+  lastErrorCode?: string;
+  leaseExpiresAt?: string;
+  nextRetryAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+};
+
+export type ClaimScheduledJobInput = {
+  jobName: string;
+  idempotencyKey: string;
+  agentName: string;
+  maxAttempts: number;
+  leaseSeconds: number;
+};
+
+export type ScheduledJobClaim = {
+  claimed: boolean;
+  reason?: "duplicate" | "concurrency_limited";
+  job: ScheduledJobRecord;
+};
+
+export type CompleteScheduledJobInput = {
+  jobId: string;
+  status: Exclude<ScheduledJobStatus, "running">;
+  retryable: boolean;
+  lastErrorCode?: string;
+  nextRetryAt?: string;
+};
+
 export type RoutingDecisionRecord = {
   id: string;
   runId: string;
@@ -126,6 +167,8 @@ export type ExecutionRepository = {
   queryApprovals(query: ApprovalQuery): Promise<ApprovalPage>;
   createAgentRun(input: CreateAgentRunInput): Promise<AgentRunRecord>;
   completeAgentRun(input: CompleteAgentRunInput): Promise<AgentRunRecord>;
+  claimScheduledJob(input: ClaimScheduledJobInput): Promise<ScheduledJobClaim>;
+  completeScheduledJob(input: CompleteScheduledJobInput): Promise<ScheduledJobRecord>;
   recordRoutingDecision(input: RecordRoutingDecisionInput): Promise<RoutingDecisionRecord>;
   recordAuditEvent(input: RecordAuditEventInput): Promise<AuditEventRecord>;
   recordToolCall(input: RecordToolCallInput): Promise<ToolCallRecord>;
@@ -133,6 +176,7 @@ export type ExecutionRepository = {
   listRoutingDecisions(): Promise<RoutingDecisionRecord[]>;
   listAuditEvents(): Promise<AuditEventRecord[]>;
   listToolCalls(): Promise<ToolCallRecord[]>;
+  listScheduledJobs(): Promise<ScheduledJobRecord[]>;
 };
 
 export function createInMemoryExecutionRepository({
@@ -147,6 +191,7 @@ export function createInMemoryExecutionRepository({
   const routingDecisions: RoutingDecisionRecord[] = [];
   const auditEvents: AuditEventRecord[] = [];
   const toolCalls: ToolCallRecord[] = [];
+  const scheduledJobs = new Map<string, ScheduledJobRecord>();
 
   return {
     async createApproval(input) {
@@ -255,6 +300,72 @@ export function createInMemoryExecutionRepository({
       return completed;
     },
 
+    async claimScheduledJob(input) {
+      const now = clock();
+      const timestamp = now.toISOString();
+      const leaseExpiresAt = new Date(now.getTime() + input.leaseSeconds * 1_000).toISOString();
+      const existing = scheduledJobs.get(input.idempotencyKey);
+      if (!existing) {
+        const activeJob = [...scheduledJobs.values()].find((candidate) =>
+          candidate.jobName === input.jobName
+          && candidate.status === "running"
+          && candidate.leaseExpiresAt
+          && new Date(candidate.leaseExpiresAt).getTime() > now.getTime(),
+        );
+        if (activeJob) return { claimed: false, reason: "concurrency_limited", job: activeJob };
+        const job: ScheduledJobRecord = {
+          id: idFactory(),
+          jobName: input.jobName,
+          idempotencyKey: input.idempotencyKey,
+          agentName: input.agentName,
+          status: "running",
+          attemptCount: 1,
+          maxAttempts: input.maxAttempts,
+          retryable: false,
+          leaseExpiresAt,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        scheduledJobs.set(job.idempotencyKey, job);
+        return { claimed: true, job };
+      }
+      const leaseExpired = !existing.leaseExpiresAt || new Date(existing.leaseExpiresAt).getTime() <= now.getTime();
+      const retryDue = existing.status === "retry_scheduled" && (!existing.nextRetryAt || new Date(existing.nextRetryAt).getTime() <= now.getTime());
+      const reclaimExpiredLease = existing.status === "running" && leaseExpired;
+      if ((!retryDue && !reclaimExpiredLease) || existing.attemptCount >= existing.maxAttempts) {
+        return { claimed: false, reason: "duplicate", job: existing };
+      }
+      const job: ScheduledJobRecord = {
+        ...existing,
+        status: "running",
+        attemptCount: existing.attemptCount + 1,
+        retryable: false,
+        leaseExpiresAt,
+        nextRetryAt: undefined,
+        updatedAt: timestamp,
+      };
+      scheduledJobs.set(job.idempotencyKey, job);
+      return { claimed: true, job };
+    },
+
+    async completeScheduledJob(input) {
+      const job = [...scheduledJobs.values()].find((candidate) => candidate.id === input.jobId);
+      if (!job || job.status !== "running") throw new Error("Scheduled job is not running");
+      const timestamp = clock().toISOString();
+      const completed: ScheduledJobRecord = {
+        ...job,
+        status: input.status,
+        retryable: input.retryable,
+        lastErrorCode: input.lastErrorCode ?? job.lastErrorCode,
+        nextRetryAt: input.nextRetryAt,
+        leaseExpiresAt: undefined,
+        updatedAt: timestamp,
+        completedAt: input.status === "completed" || input.status === "failed" ? timestamp : undefined,
+      };
+      scheduledJobs.set(completed.idempotencyKey, completed);
+      return completed;
+    },
+
     async recordRoutingDecision(input) {
       const decision = {
         ...input,
@@ -299,6 +410,10 @@ export function createInMemoryExecutionRepository({
 
     async listToolCalls() {
       return [...toolCalls];
+    },
+
+    async listScheduledJobs() {
+      return [...scheduledJobs.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
     },
   };
 }

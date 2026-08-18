@@ -13,6 +13,10 @@ import type {
   RoutingDecisionRecord,
   ToolCallRecord,
   ApprovalQuery,
+  ClaimScheduledJobInput,
+  CompleteScheduledJobInput,
+  ScheduledJobClaim,
+  ScheduledJobRecord,
 } from "./repository";
 import { decodeApprovalCursor, encodeApprovalCursor } from "./repository";
 
@@ -54,6 +58,28 @@ type SupabaseAgentRunRow = {
   output_summary?: string | null;
   error_code?: string | null;
   duration_ms?: number | null;
+};
+
+type SupabaseScheduledJobRow = {
+  id: string;
+  job_name: string;
+  idempotency_key: string;
+  agent_name: string;
+  status: ScheduledJobRecord["status"];
+  attempt_count: number;
+  max_attempts: number;
+  retryable?: boolean | null;
+  last_error_code?: string | null;
+  lease_expires_at?: string | null;
+  next_retry_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+};
+
+type SupabaseScheduledJobClaimRow = SupabaseScheduledJobRow & {
+  claimed: boolean;
+  claim_reason?: ScheduledJobClaim["reason"] | null;
 };
 
 type SupabaseRoutingDecisionRow = {
@@ -132,6 +158,25 @@ function toAgentRunRecord(row: SupabaseAgentRunRow): AgentRunRecord {
     outputSummary: row.output_summary ?? undefined,
     errorCode: row.error_code ?? undefined,
     durationMs: row.duration_ms ?? undefined,
+  };
+}
+
+function toScheduledJobRecord(row: SupabaseScheduledJobRow): ScheduledJobRecord {
+  return {
+    id: row.id,
+    jobName: row.job_name,
+    idempotencyKey: row.idempotency_key,
+    agentName: row.agent_name,
+    status: row.status,
+    attemptCount: row.attempt_count,
+    maxAttempts: row.max_attempts,
+    retryable: row.retryable ?? false,
+    lastErrorCode: row.last_error_code ?? undefined,
+    leaseExpiresAt: row.lease_expires_at ?? undefined,
+    nextRetryAt: row.next_retry_at ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at ?? undefined,
   };
 }
 
@@ -347,6 +392,40 @@ export function createSupabaseExecutionRepository({
       return toAgentRunRecord(rows[0]);
     },
 
+    async claimScheduledJob(input: ClaimScheduledJobInput): Promise<ScheduledJobClaim> {
+      const rows = await requestRows<SupabaseScheduledJobClaimRow>("/rpc/claim_scheduled_job", {
+        method: "POST",
+        body: JSON.stringify({
+          p_job_name: input.jobName,
+          p_idempotency_key: input.idempotencyKey,
+          p_agent_name: input.agentName,
+          p_max_attempts: input.maxAttempts,
+          p_lease_seconds: input.leaseSeconds,
+        }),
+      });
+      if (rows.length !== 1) throw new ExecutionPersistenceError("Execution persistence did not return a scheduled job claim");
+      return {
+        claimed: rows[0].claimed,
+        reason: rows[0].claim_reason ?? undefined,
+        job: toScheduledJobRecord(rows[0]),
+      };
+    },
+
+    async completeScheduledJob(input: CompleteScheduledJobInput): Promise<ScheduledJobRecord> {
+      const rows = await requestRows<SupabaseScheduledJobRow>("/rpc/complete_scheduled_job", {
+        method: "POST",
+        body: JSON.stringify({
+          p_job_id: input.jobId,
+          p_status: input.status,
+          p_retryable: input.retryable,
+          p_last_error_code: input.lastErrorCode ?? null,
+          p_next_retry_at: input.nextRetryAt ?? null,
+        }),
+      });
+      if (rows.length !== 1) throw new ExecutionPersistenceError("Scheduled job was not found or is no longer running");
+      return toScheduledJobRecord(rows[0]);
+    },
+
     async recordRoutingDecision(input: RecordRoutingDecisionInput) {
       const rows = await requestRows<SupabaseRoutingDecisionRow>("/routing_decisions", {
         method: "POST",
@@ -413,6 +492,13 @@ export function createSupabaseExecutionRepository({
         method: "GET",
       });
       return rows.map(toAgentRunRecord);
+    },
+
+    async listScheduledJobs() {
+      const rows = await requestRows<SupabaseScheduledJobRow>("/scheduled_jobs?select=*&order=created_at.desc", {
+        method: "GET",
+      });
+      return rows.map(toScheduledJobRecord);
     },
 
     async listRoutingDecisions() {
