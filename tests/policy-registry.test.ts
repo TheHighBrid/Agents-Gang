@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { defineTool } from "../lib/execution/tool-execution";
 import {
+  JOB_POLICY_REGISTRY,
   TOOL_POLICY_REGISTRY,
   getToolPolicy,
   assertToolPolicy,
@@ -29,6 +30,35 @@ describe("typed capability and risk policy registry", () => {
       "shopify.variant.create",
       "shopify.variant.update",
     ]));
+  });
+
+  test("models the complete governance contract for every enabled tool", () => {
+    for (const policy of TOOL_POLICY_REGISTRY) {
+      expect(policy.owner).toBeTruthy();
+      expect(policy.targetIdentity).toBeTruthy();
+      expect(["none", "read", "draft", "notify", "mutate"]).toContain(policy.externalEffect);
+      expect(["not_applicable", "deterministic_key", "required", "unsupported"]).toContain(policy.idempotency);
+      expect(policy.enabled).toBe(true);
+    }
+  });
+
+  test("inventories every enabled scheduled job separately from tool actions", () => {
+    expect(JOB_POLICY_REGISTRY.map((policy) => policy.actionType).sort()).toEqual([
+      "job.daily_melato_audit",
+      "job.inbox_triage",
+      "job.product_catalog_audit",
+      "job.product_page_scan",
+      "job.weekly_trend_radar",
+    ]);
+    for (const policy of JOB_POLICY_REGISTRY) {
+      expect(policy.owner).toBeTruthy();
+      expect(policy.externalEffect).toBe("none");
+      expect(policy.idempotency).toBe("required");
+      expect(policy.enabled).toBe(true);
+      for (const toolName of policy.neededTools) {
+        expect(getToolPolicy(toolName), `${policy.actionType} references ${toolName}`).toBeDefined();
+      }
+    }
   });
 
   test("marks reads as risk 1 and mutating or drafting actions as approval-gated risk 3", () => {

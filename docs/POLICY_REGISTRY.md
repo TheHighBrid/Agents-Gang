@@ -1,23 +1,46 @@
 # Capability and Risk Policy Registry
 
-The policy registry is the governance source of truth for every enabled tool and scheduled job action. It lives in `lib/policy/registry.ts` and is deliberately server-side code. The registry contains no credentials, raw protected payloads, or user-specific approval data.
+The governance source of truth for enabled external tool actions and scheduled jobs is `lib/execution/policy-registry.ts`. The registry contains policy metadata only and must never contain credentials, raw protected payloads, customer data, message bodies, or hidden prompts.
 
-## Required policy fields
+## Tool policy contract
 
-Every enabled tool entry must define an owner, capability, numeric risk level, approval requirement, target identity, external effect, idempotency strategy, and enabled state. Every scheduled job entry must define its owner, referenced tools, external-effect classification, idempotency requirement, and enabled state.
+Every enabled tool entry defines its owner, capability, risk level, approval requirement, target-binding rule, target identity, external-effect classification, idempotency status, and enabled state.
 
-Tool capabilities are `read`, `draft`, `prepare`, or `execute`. External effects distinguish `none`, `read`, `draft`, `notify`, and `mutate`. Idempotency is either not applicable, represented by a deterministic key, or explicitly required.
+The execution boundary enforces this registry twice by design: `defineTool()` rejects unregistered or drifted definitions during construction, and `executeTool()` calls `assertToolPolicy()` again before any approval lookup, input parsing, or external effect. Constructing a `ToolDefinition` directly therefore cannot bypass policy.
 
-## Approval rules
+High-risk actions at risk level 3 or above remain approval-gated. Mutating actions must remain approval-gated even if their numeric risk classification changes later.
 
-High-risk actions at risk level 3 or above must remain approval-gated. Any action classified as a mutation must also be approval-gated, even if a future risk-level calibration would otherwise lower its numeric score. Publishing, email-send behavior, price changes, deletion, inventory changes, and other high-risk external mutations must never be enabled without a corresponding approval policy.
+## Scheduled-job policy contract
 
-Scheduled jobs may read or prepare data, but they must not bypass the governed execution contract. Each job’s `neededTools` list must resolve to registered tool names. A job’s own external effect is `none`; external effects belong to the governed tool calls it invokes.
+Every enabled scheduled job has a separate policy entry with its owner, governed tool dependencies, external-effect classification, idempotency requirement, and enabled state. Job entries may reference only registered tools.
+
+Current scheduled inventory:
+
+- `job.daily_melato_audit`
+- `job.product_catalog_audit`
+- `job.product_page_scan`
+- `job.inbox_triage`
+- `job.weekly_trend_radar`
+
+## Idempotency vocabulary
+
+- `not_applicable`: read-only behavior with no external effect to deduplicate.
+- `deterministic_key`: the governed action derives a stable identity used by its current contract.
+- `required`: durable deduplication is a required property of the action or job.
+- `unsupported`: the current adapter does not yet provide a trustworthy idempotency guarantee.
+
+`unsupported` is an explicit release-safety signal. It does not permit blind retry, duplicate delivery, or bypassing approval. Downstream integration and scheduler work must not advertise retry safety for such an action until durable idempotency is implemented and tested.
 
 ## Change procedure
 
-When adding or changing a tool or scheduled job, update the registry in the same pull request as the runtime implementation. Add or update completeness tests before production changes and verify that the tests fail for the missing or inconsistent policy. Review the owner, capability, risk, approval, target, external-effect, and idempotency fields together rather than copying a single risk literal from an adjacent tool.
+When a tool or scheduled job is added, removed, renamed, or changes behavior:
 
-For a policy change, the pull request must explain the safety impact, whether existing approval behavior changes, how duplicate or retry behavior is handled, and whether any job or adapter now references a new external effect. The registry’s import-time invariants and the policy-registry test suite must remain green.
+1. Update the registry in the same pull request as the runtime change.
+2. Add or update a failing-first completeness or policy-drift regression.
+3. Verify owner, capability, risk, approval requirement, target identity, external effect, idempotency, and enabled state against actual runtime behavior.
+4. Keep risk-3/risk-4 and mutating actions approval-gated.
+5. Do not claim idempotency the adapter cannot prove across duplicate delivery or ambiguous transport failure.
+6. Run `npm run lint`, `npm run typecheck`, `npm run build`, and `npm test` before review.
+7. Require Codex review for execution/security implications and Manus review for integration inventory changes.
 
-The shared `defineTool` helper rejects registered tool definitions whose capability or risk metadata drifts from the registry. Unregistered test-only tools remain permitted so unit tests can exercise generic execution behavior without pretending those fixtures are production actions.
+The import-time registry invariants, policy-registry tests, and execution-boundary regression must remain green.
