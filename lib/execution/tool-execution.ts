@@ -18,6 +18,7 @@ export type ToolExecutionContext = {
   runId: string;
   agentName: string;
   approvalId?: string;
+  correlationId?: string;
 };
 
 export type ToolFailure = {
@@ -66,6 +67,13 @@ function normalizeExecutionFailure(error: unknown) {
   return { errorCode: "tool_execution_failed", retriable: true };
 }
 
+function auditMetadata(context: ToolExecutionContext, errorCode?: string) {
+  return {
+    ...(context.correlationId ? { correlationId: context.correlationId } : {}),
+    ...(errorCode ? { errorCode } : {}),
+  };
+}
+
 export function defineTool<Input, Output>(definition: ToolDefinition<Input, Output>) {
   assertToolPolicy(definition);
   return definition;
@@ -109,7 +117,7 @@ export async function executeTool<Input, Output>(
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "blocked",
-      metadata: { errorCode: gate.reason },
+      metadata: auditMetadata(context, gate.reason),
     });
     return {
       ok: false,
@@ -136,6 +144,16 @@ export async function executeTool<Input, Output>(
       outcome: "failed",
       errorCode: "invalid_input",
     });
+    await context.repository.recordAuditEvent({
+      runId: context.runId,
+      agentName: context.agentName,
+      toolName: policy.actionType,
+      riskLevel: policy.riskLevel,
+      approvalId: context.approvalId,
+      eventType: "tool.execution",
+      outcome: "failed",
+      metadata: auditMetadata(context, "invalid_input"),
+    });
     return {
       ok: false,
       error: { code: "invalid_input", message, retriable: false },
@@ -157,6 +175,16 @@ export async function executeTool<Input, Output>(
       approvalId: matchingApproval.id,
       outcome: "blocked",
       errorCode: "approval_required",
+    });
+    await context.repository.recordAuditEvent({
+      runId: context.runId,
+      agentName: context.agentName,
+      toolName: policy.actionType,
+      riskLevel: policy.riskLevel,
+      approvalId: matchingApproval.id,
+      eventType: "tool.execution",
+      outcome: "blocked",
+      metadata: auditMetadata(context, "approval_required"),
     });
     return {
       ok: false,
@@ -188,7 +216,7 @@ export async function executeTool<Input, Output>(
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "succeeded",
-      metadata: {},
+      metadata: auditMetadata(context),
     });
     return { ok: true, data };
   } catch (error) {
@@ -212,7 +240,7 @@ export async function executeTool<Input, Output>(
       approvalId: context.approvalId,
       eventType: "tool.execution",
       outcome: "failed",
-      metadata: { errorCode: failure.errorCode },
+      metadata: auditMetadata(context, failure.errorCode),
     });
     return {
       ok: false,
