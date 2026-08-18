@@ -1,0 +1,108 @@
+name: Migration rehearsal
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  migration-fresh:
+    name: Fresh schema rehearsal
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agents_gang_fresh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agents_gang_fresh"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build fresh migration bundle
+        run: node scripts/db-migrate.mjs bundle fresh > /tmp/agents-gang-fresh.sql
+
+      - name: Apply and verify fresh schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGRES_ID="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_ID"
+          docker exec -i "$POSTGRES_ID" psql -U postgres -d agents_gang_fresh -X -v ON_ERROR_STOP=1 < /tmp/agents-gang-fresh.sql 2>&1 | tee /tmp/agents-gang-fresh.out
+          grep -F "Agents-Gang schema verification passed" /tmp/agents-gang-fresh.out
+
+  migration-upgrade:
+    name: Governed schema upgrade rehearsal
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agents_gang_upgrade
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agents_gang_upgrade"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Load prior governed schema fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGRES_ID="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_ID"
+          docker exec -i "$POSTGRES_ID" psql -U postgres -d agents_gang_upgrade -X -v ON_ERROR_STOP=1 < db/fixtures/20260815_governed_execution_baseline.sql
+          docker exec "$POSTGRES_ID" psql -U postgres -d agents_gang_upgrade -X -v ON_ERROR_STOP=1 -c "insert into approval_requests (agent_name, action_type, risk_level, status) values ('migration-rehearsal', 'shopify.products.read', 1, 'approved');"
+
+      - name: Build governed-schema upgrade bundle
+        run: node scripts/db-migrate.mjs bundle upgrade --from 20260815_governed_execution > /tmp/agents-gang-upgrade.sql
+
+      - name: Apply and verify governed-schema upgrade
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGRES_ID="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_ID"
+          docker exec -i "$POSTGRES_ID" psql -U postgres -d agents_gang_upgrade -X -v ON_ERROR_STOP=1 < /tmp/agents-gang-upgrade.sql 2>&1 | tee /tmp/agents-gang-upgrade.out
+          grep -F "Agents-Gang baseline 20260815_governed_execution verified" /tmp/agents-gang-upgrade.out
+          grep -F "Agents-Gang schema verification passed" /tmp/agents-gang-upgrade.out
+          docker exec "$POSTGRES_ID" psql -U postgres -d agents_gang_upgrade -X -v ON_ERROR_STOP=1 -Atc "select count(*) from approval_requests where agent_name = 'migration-rehearsal' and status = 'approved'" | grep -Fx "1"
+
+      - name: Prove mismatched baseline fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          POSTGRES_ID="$(docker ps --filter ancestor=postgres:16-alpine --format '{{.ID}}' | head -n 1)"
+          test -n "$POSTGRES_ID"
+          node scripts/db-migrate.mjs bundle upgrade --from 20260815_governed_execution > /tmp/agents-gang-wrong-baseline.sql
+          set +e
+          docker exec -i "$POSTGRES_ID" psql -U postgres -d agents_gang_upgrade -X -v ON_ERROR_STOP=1 < /tmp/agents-gang-wrong-baseline.sql > /tmp/agents-gang-wrong-baseline.out 2>&1
+          status=$?
+          set -e
+          test "$status" -ne 0
+          grep -F "Baseline mismatch" /tmp/agents-gang-wrong-baseline.out
