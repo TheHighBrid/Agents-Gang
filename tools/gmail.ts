@@ -49,6 +49,12 @@ type GmailMessageResponse = {
   payload?: { headers?: Array<{ name?: string; value?: string }> };
 };
 
+function assertGmailEnabled() {
+  if (process.env.GMAIL_ENABLED?.trim() === "false") {
+    throw new Error("Gmail integration is disabled");
+  }
+}
+
 function getHeader(message: GmailMessageResponse, name: string): string | null {
   const header = message.payload?.headers?.find((item) => item.name?.toLowerCase() === name.toLowerCase());
   return header?.value ?? null;
@@ -124,6 +130,7 @@ export async function searchGmailMessages(
   query: string,
   options: GmailReadOptions = {},
 ): Promise<GmailMessageSummary[]> {
+  assertGmailEnabled();
   const normalizedQuery = query.trim();
   if (!normalizedQuery) throw new Error("Gmail search query is required");
   const maxResults = options.maxResults ?? 10;

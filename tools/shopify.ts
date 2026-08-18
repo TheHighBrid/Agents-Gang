@@ -26,6 +26,9 @@ export class ShopifyAdapterError extends Error {
 }
 
 function requireShopifyConfiguration(environment: ShopifyEnvironment) {
+  if (environment.SHOPIFY_ENABLED?.trim() === "false") {
+    throw new Error("Shopify adapter is disabled");
+  }
   const domain = environment.SHOPIFY_STORE_DOMAIN?.trim();
   const token = environment.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim();
   const mode = environment.SHOPIFY_STORE_MODE?.trim();

@@ -51,6 +51,9 @@ export async function createGmailDraft(
   input: GmailDraftInput,
   options: GmailDraftOptions = {},
 ): Promise<GmailDraftResult> {
+  if (process.env.GMAIL_ENABLED?.trim() === "false") {
+    throw new Error("Gmail integration is disabled");
+  }
   const parsed = parseDraftInput(input);
   const accessToken = options.accessToken ?? process.env.GMAIL_ACCESS_TOKEN;
   if (!accessToken) throw new Error("Gmail access token is not configured");
@@ -61,7 +64,7 @@ export async function createGmailDraft(
     "Content-Type: text/plain; charset=UTF-8",
     "",
     parsed.body,
-  ].join("\\r\\n");
+  ].join("\r\n");
   const raw = Buffer.from(rawMessage, "utf8").toString("base64url");
   const response = await fetchGmail(fetcher, "https://gmail.googleapis.com/gmail/v1/users/me/drafts", {
     method: "POST",

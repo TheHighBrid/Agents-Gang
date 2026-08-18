@@ -98,6 +98,7 @@ export async function postInboxAlert(
   messages: InboxAlertMessage[],
   options: { webhookUrl?: string; fetcher?: typeof fetch } = {},
 ): Promise<void> {
+  if (process.env.INBOX_ALERTS_ENABLED?.trim() === "false") return;
   const webhookUrl = options.webhookUrl ?? process.env.INBOX_ALERT_WEBHOOK_URL;
   if (!webhookUrl) return;
   const parsedUrl = new URL(webhookUrl);

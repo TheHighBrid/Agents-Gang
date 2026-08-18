@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "validate:env": "node scripts/validate-env.mjs",
     "db:migrate": "node scripts/db-migrate.mjs apply",
     "db:migration:bundle": "node scripts/db-migrate.mjs bundle",
     "db:verify": "node scripts/db-migrate.mjs apply verify"
