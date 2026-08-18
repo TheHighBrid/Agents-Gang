@@ -29,6 +29,23 @@ describe("release evidence documentation contract", () => {
     }
   });
 
+  it("records Chapter 5 implementation evidence without overstating platform or staging readiness", () => {
+    const register = read("docs/RELEASE_EVIDENCE_REGISTER.md");
+    const tracker = read("docs/TASK_TRACKER.md");
+
+    for (const id of ["EV-C5-01-01", "EV-C5-02-01", "EV-C5-03-01", "EV-C5-03-02"]) {
+      expect(register, `${id} must be recorded`).toContain(`### ${id}`);
+    }
+
+    expect(register).toContain("PR #65");
+    expect(register).toContain("32137947570");
+    expect(register).toContain("sha256:041b4950c6f35c488357ef7244748c5d4dc529a2778551ed661754a444f5631d");
+    expect(register).toMatch(/\| RC-07 \|[^\n]+\| Blocked \|/);
+    expect(register).toContain("releaseEligible=true");
+    expect(register).toContain("GitHub `main` ruleset");
+    expect(tracker).toMatch(/\| C5-03 \|[^\n]+\| Blocked \|/);
+  });
+
   it("defines a decision log with the required decision fields", () => {
     const decisionLog = read("docs/DECISION_LOG.md");
 

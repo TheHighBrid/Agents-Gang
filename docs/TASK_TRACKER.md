@@ -10,7 +10,7 @@ Release proof and material implementation decisions are indexed in the [Release 
 |---|---:|---|---|---|---|---|---|
 | C0-01 | [#10](https://github.com/TheHighBrid/Agents-Gang/issues/10) | P0 | Chapter 0 - Program Control | Codex | - | Accepted | Full CI quality gate green on push and pull request. |
 | C0-02 | [#11](https://github.com/TheHighBrid/Agents-Gang/issues/11) | P0 | Chapter 0 - Program Control | Manus Agent | - | Accepted | Labels, milestones, issue workflow, and planning references published. |
-| C0-03 | [#12](https://github.com/TheHighBrid/Agents-Gang/issues/12) | P1 | Chapter 0 - Program Control | SOL 5.6 | C0-02 | In progress | Release evidence register and decision-log convention documented. |
+| C0-03 | [#12](https://github.com/TheHighBrid/Agents-Gang/issues/12) | P1 | Chapter 0 - Program Control | SOL 5.6 | C0-02 | Accepted | Release evidence register and decision-log convention documented and issue closed. |
 | C1-01 | [#13](https://github.com/TheHighBrid/Agents-Gang/issues/13) | P0 | Chapter 1 - Approval Control Plane | Codex | C0-01 | Accepted | Anonymous/non-founder/founder authorization test matrix passes. |
 | C1-02 | [#14](https://github.com/TheHighBrid/Agents-Gang/issues/14) | P0 | Chapter 1 - Approval Control Plane | Codex | C1-01 | Accepted | Safe paginated approval repository queries and indexes verified. |
 | C1-03 | [#15](https://github.com/TheHighBrid/Agents-Gang/issues/15) | P0 | Chapter 1 - Approval Control Plane | Codex | C1-01, C1-02 | Accepted | Protected list/detail API contract and redaction tests pass. |
@@ -20,7 +20,7 @@ Release proof and material implementation decisions are indexed in the [Release 
 | C2-01 | [#19](https://github.com/TheHighBrid/Agents-Gang/issues/19) | P0 | Chapter 2 - Founder Operations Surface | SOL 5.6 | C1-03 | Accepted | Accessible approval queue/detail UI reads protected persisted data. |
 | C2-02 | [#20](https://github.com/TheHighBrid/Agents-Gang/issues/20) | P0 | Chapter 2 - Founder Operations Surface | SOL 5.6 | C1-04, C2-01 | Accepted | Confirmed decision flow handles conflict, expired, and consumed states. |
 | C2-03 | [#21](https://github.com/TheHighBrid/Agents-Gang/issues/21) | P1 | Chapter 2 - Founder Operations Surface | SOL 5.6 | C1-02 | Accepted | Persisted run/route/tool/audit dashboard with all state handling. |
-| C2-04 | [#22](https://github.com/TheHighBrid/Agents-Gang/issues/22) | P1 | Chapter 2 - Founder Operations Surface | SOL 5.6 | C2-01, C2-02, C2-03 | Review | Founder workflow sandbox acceptance is merged; staging evidence remains C5-04. |
+| C2-04 | [#22](https://github.com/TheHighBrid/Agents-Gang/issues/22) | P1 | Chapter 2 - Founder Operations Surface | SOL 5.6 | C2-01, C2-02, C2-03 | Accepted | Founder workflow sandbox acceptance is merged; staging evidence remains C5-04. |
 | C3-01 | [#23](https://github.com/TheHighBrid/Agents-Gang/issues/23) | P0 | Chapter 3 - Governed Integration Fabric | Manus Agent | C1-05 | Accepted | Shopify test-store contract, policy gates, and failure behavior verified. |
 | C3-02 | [#24](https://github.com/TheHighBrid/Agents-Gang/issues/24) | P1 | Chapter 3 - Governed Integration Fabric | Manus Agent | C1-05 | Accepted | Gmail read/draft/send policy contract and audit tests pass. |
 | C3-03 | [#25](https://github.com/TheHighBrid/Agents-Gang/issues/25) | P1 | Chapter 3 - Governed Integration Fabric | Manus Agent | C1-05 | Backlog | Calendar read/prepare/mutate policy and idempotency tests pass. |
@@ -32,18 +32,18 @@ Release proof and material implementation decisions are indexed in the [Release 
 | C4-04 | [#31](https://github.com/TheHighBrid/Agents-Gang/issues/31) | P1 | Chapter 4 - Scheduling and Observability | SOL 5.6 | C2-03, C4-03 | Accepted | Job-health dashboard exposes safe retry/failure/correlation state and operational alerts. |
 | C5-01 | [#32](https://github.com/TheHighBrid/Agents-Gang/issues/32) | P0 | Chapter 5 - Deployment Readiness and Launch | Manus Agent | C1-02, C4-01 | Accepted | Fresh/upgrade migration runner and PostgreSQL verification rehearsal pass. |
 | C5-02 | [#33](https://github.com/TheHighBrid/Agents-Gang/issues/33) | P0 | Chapter 5 - Deployment Readiness and Launch | Codex | C5-01 | Accepted | Fail-closed environment/secret validation, feature isolation, and redaction checks pass. |
-| C5-03 | [#34](https://github.com/TheHighBrid/Agents-Gang/issues/34) | P0 | Chapter 5 - Deployment Readiness and Launch | Codex | C0-01, C5-02 | Review | In-repo release gate, dependency/secret/provenance checks are under exact-head review; GitHub platform branch-protection evidence remains required. |
+| C5-03 | [#34](https://github.com/TheHighBrid/Agents-Gang/issues/34) | P0 | Chapter 5 - Deployment Readiness and Launch | Codex | C0-01, C5-02 | Blocked | In-repo release gate is merged and exact-head verified. GitHub `main` platform enforcement and a promotable post-merge `main` manifest remain required. |
 | C5-04 | [#35](https://github.com/TheHighBrid/Agents-Gang/issues/35) | P0 | Chapter 5 - Deployment Readiness and Launch | SOL 5.6 | C2-04, C3-05, C4-04, C5-01-C5-03 | Blocked | Staging soak/founder UAT cannot be accepted until C5-03 platform enforcement is verified or an explicit release exception is documented. |
 | C5-05 | [#36](https://github.com/TheHighBrid/Agents-Gang/issues/36) | P0 | Chapter 5 - Deployment Readiness and Launch | Manus Agent | C5-04 | Backlog | Deploy, rollback, incident, and handover runbooks are rehearsal-ready. |
 | C5-06 | [#37](https://github.com/TheHighBrid/Agents-Gang/issues/37) | P0 | Chapter 5 - Deployment Readiness and Launch | Manus Agent + founder | C5-01-C5-05 | Backlog | Go/no-go record, controlled deploy, post-deploy verification complete. |
 
 ## Current execution order
 
-1. **C5-03:** finish exact-head release-gate verification, merge the in-repo controls, then capture a green `main` release-manifest run.
-2. **C5-03 platform control:** verify or configure GitHub protection/ruleset enforcement for `main`; do not represent a committed workflow as equivalent to branch protection.
-3. **C5-04:** staging soak and founder UAT after C5-03 is actually satisfied.
-4. **C5-05:** deployment, rollback, incident, mutation-disable, and handover rehearsal.
-5. **C5-06:** founder go/no-go, controlled production deployment, post-deploy verification, and rollback watch.
+1. **C5-03 platform control:** verify or configure the GitHub `main` ruleset and capture a push-triggered Release gate manifest with `releaseEligible=true`.
+2. **C5-04:** staging soak and founder UAT after C5-03 is actually satisfied.
+3. **C5-05:** deployment, rollback, incident, mutation-disable, and handover rehearsal.
+4. **C5-06:** founder go/no-go, controlled production deployment, post-deploy verification, and rollback watch.
+5. **Parallel non-blocking integration work:** C3-03 and C3-04 may proceed under their Manus ownership but must not be mistaken for the release blocker.
 
 ## Execution discipline
 
