@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { GET as getDashboardRoute } from "../app/api/dashboard/route";
 import { createFounderSessionToken, resolveFounderIdentity } from "../lib/approvals/auth";
 import { getDashboardSnapshotResponse } from "../lib/dashboard/dashboard-api";
 import { createInMemoryExecutionRepository } from "../lib/execution/repository";
@@ -180,6 +181,50 @@ describe("founder workflow acceptance", () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(resolveFounderIdentity(authenticated, secret, { now })).toMatchObject({ ok: true, identity: { role: "founder" } });
+  });
+
+  test("enforces the signed founder boundary on the actual dashboard route", async () => {
+    const previousSecret = process.env.FOUNDER_AUTH_SECRET;
+    const previousRevocations = process.env.FOUNDER_REVOKED_SESSION_IDS;
+    const previousSupabaseUrl = process.env.SUPABASE_URL;
+    const previousSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const secret = "acceptance-route-founder-secret";
+
+    try {
+      process.env.FOUNDER_AUTH_SECRET = secret;
+      delete process.env.FOUNDER_REVOKED_SESSION_IDS;
+      delete process.env.SUPABASE_URL;
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      const spoofed = await getDashboardRoute(new Request("https://example.test/api/dashboard", {
+        headers: { "x-user-role": "founder" },
+      }));
+      expect(spoofed.status).toBe(401);
+      await expect(spoofed.json()).resolves.toEqual({ error: "Founder authentication required" });
+
+      const now = Math.floor(Date.now() / 1000);
+      const token = createFounderSessionToken({
+        subject: "founder-route-acceptance",
+        role: "founder",
+        sessionId: "route-acceptance-session",
+        issuedAt: now - 60,
+        expiresAt: now + 900,
+      }, secret);
+      const signed = await getDashboardRoute(new Request("https://example.test/api/dashboard", {
+        headers: { Authorization: `Bearer ${token}` },
+      }));
+      expect(signed.status).toBe(503);
+      await expect(signed.json()).resolves.toEqual({ error: "Execution storage is not configured" });
+    } finally {
+      if (previousSecret === undefined) delete process.env.FOUNDER_AUTH_SECRET;
+      else process.env.FOUNDER_AUTH_SECRET = previousSecret;
+      if (previousRevocations === undefined) delete process.env.FOUNDER_REVOKED_SESSION_IDS;
+      else process.env.FOUNDER_REVOKED_SESSION_IDS = previousRevocations;
+      if (previousSupabaseUrl === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previousSupabaseUrl;
+      if (previousSupabaseKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      else process.env.SUPABASE_SERVICE_ROLE_KEY = previousSupabaseKey;
+    }
   });
 
   test("provides a founder-readable script and release evidence contract", () => {
