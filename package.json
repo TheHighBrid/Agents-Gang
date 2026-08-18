@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:migrate": "node scripts/db-migrate.mjs apply",
+    "db:migration:bundle": "node scripts/db-migrate.mjs bundle",
+    "db:verify": "node scripts/db-migrate.mjs apply verify"
   },
   "dependencies": {
     "dotenv": "latest",
