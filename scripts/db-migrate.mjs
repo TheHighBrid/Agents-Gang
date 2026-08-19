@@ -12,12 +12,14 @@ export const migrationBaselines = Object.freeze([
   "20260815_governed_execution",
   "20260817_approval_consumption",
   "20260818_scheduler_reliability",
+  "20260819_supabase_scheduler_hardening",
 ]);
 
 const forwardMigrations = Object.freeze([
   "20260815_governed_execution",
   "20260817_approval_consumption",
   "20260818_scheduler_reliability",
+  "20260819_supabase_scheduler_hardening",
 ]);
 
 function read(root, path) {
@@ -28,11 +30,20 @@ function section(label, sql) {
   return `\n-- Agents-Gang migration section: ${label}\n${sql.trim()}\n`;
 }
 
+function securityVerification(root) {
+  return section("Supabase security verification", read(root, "db/verify-supabase-security.sql"));
+}
+
 export function buildFreshBundle(root = defaultRoot) {
   return [
     "\\set ON_ERROR_STOP on\n",
     section("fresh schema", read(root, "db/schema.sql")),
+    section(
+      "forward 20260819_supabase_scheduler_hardening",
+      read(root, "db/migrations/20260819_supabase_scheduler_hardening_up.sql"),
+    ),
     section("final verification", read(root, "db/verify.sql")),
+    securityVerification(root),
   ].join("");
 }
 
@@ -49,11 +60,16 @@ export function buildUpgradeBundle(root = defaultRoot, baseline) {
       read(root, `db/migrations/${migration}_up.sql`),
     )),
     section("final verification", read(root, "db/verify.sql")),
+    securityVerification(root),
   ].join("");
 }
 
 export function buildVerificationBundle(root = defaultRoot) {
-  return `\\set ON_ERROR_STOP on\n${section("verification only", read(root, "db/verify.sql"))}`;
+  return [
+    "\\set ON_ERROR_STOP on\n",
+    section("verification only", read(root, "db/verify.sql")),
+    securityVerification(root),
+  ].join("");
 }
 
 export function buildPsqlConnectionEnvironment(databaseUrl, baseEnvironment = process.env) {
@@ -135,7 +151,11 @@ function baselineGuardSql(baseline) {
     return `do $$\nbegin\n  if to_regclass('public.approval_requests') is null\n    or to_regclass('public.agent_runs') is null\n    or to_regclass('public.routing_decisions') is null\n    or to_regclass('public.tool_calls') is null\n    or to_regclass('public.audit_events') is null then\n    raise exception 'Baseline mismatch: governed execution objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_constraint c\n    where c.conrelid = 'public.approval_requests'::regclass\n      and c.contype = 'c'\n      and pg_get_constraintdef(c.oid) like '%consumed%'\n  ) then\n    raise exception 'Baseline mismatch: consumed approval status is missing';\n  end if;\n  if to_regclass('public.scheduled_jobs') is not null then\n    raise exception 'Baseline mismatch: scheduled_jobs already exists; choose a later baseline';\n  end if;\n  raise notice 'Agents-Gang baseline 20260817_approval_consumption verified';\nend $$;`;
   }
 
-  return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: scheduler reliability objects are incomplete';\n  end if;\n  raise notice 'Agents-Gang baseline 20260818_scheduler_reliability verified';\nend $$;`;
+  if (baseline === "20260818_scheduler_reliability") {
+    return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: scheduler reliability objects are incomplete';\n  end if;\n  raise notice 'Agents-Gang baseline 20260818_scheduler_reliability verified';\nend $$;`;
+  }
+
+  return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: scheduler hardening objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_class\n    where oid = 'public.scheduled_jobs'::regclass\n      and relrowsecurity\n  ) then\n    raise exception 'Baseline mismatch: scheduler hardening RLS is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_supabase_scheduler_hardening verified';\nend $$;`;
 }
 
 function assertKnownBaseline(baseline) {
