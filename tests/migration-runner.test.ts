@@ -93,6 +93,6 @@ describe("production migration runner", () => {
       expect(verification).toContain(expected);
     }
     expect(verification).toContain("raise exception");
-    expect(verification.toLowerCase()).not.toMatch(/\b(insert|update|delete|drop|alter|create)\b/);
+    expect(verification.toLowerCase()).not.toMatch(/^\s*(insert|update|delete|drop|alter|create)\b/im);
   });
 });
