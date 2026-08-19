@@ -3,6 +3,7 @@ declare
   scheduled_jobs_oid oid := to_regclass('public.scheduled_jobs');
   claim_oid oid := to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)');
   complete_oid oid := to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)');
+  rls_auto_enable_oid oid := to_regprocedure('public.rls_auto_enable()');
 begin
   if scheduled_jobs_oid is null or claim_oid is null or complete_oid is null then
     raise exception 'Supabase security verification failed: scheduler database boundary is incomplete';
@@ -36,6 +37,14 @@ begin
     raise exception 'Supabase security verification failed: PUBLIC can execute scheduler RPCs';
   end if;
 
+  if not exists (
+    select 1 from pg_proc where oid = claim_oid and proconfig @> array['search_path=public']
+  ) or not exists (
+    select 1 from pg_proc where oid = complete_oid and proconfig @> array['search_path=public']
+  ) then
+    raise exception 'Supabase security verification failed: scheduler RPC search_path is mutable';
+  end if;
+
   if exists (select 1 from pg_roles where rolname = 'anon') then
     if has_table_privilege('anon', 'public.scheduled_jobs', 'SELECT')
       or has_table_privilege('anon', 'public.scheduled_jobs', 'INSERT')
@@ -66,6 +75,29 @@ begin
       or not has_function_privilege('service_role', 'public.claim_scheduled_job(text,text,text,integer,integer)', 'EXECUTE')
       or not has_function_privilege('service_role', 'public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)', 'EXECUTE') then
       raise exception 'Supabase security verification failed: service_role lacks scheduler persistence access';
+    end if;
+  end if;
+
+  if rls_auto_enable_oid is not null then
+    if exists (
+      select 1
+      from pg_proc p
+      cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+      where p.oid = rls_auto_enable_oid
+        and acl.grantee = 0
+        and acl.privilege_type = 'EXECUTE'
+    ) then
+      raise exception 'Supabase security verification failed: rls_auto_enable is executable by API roles';
+    end if;
+
+    if exists (select 1 from pg_roles where rolname = 'anon')
+      and has_function_privilege('anon', 'public.rls_auto_enable()', 'EXECUTE') then
+      raise exception 'Supabase security verification failed: rls_auto_enable is executable by API roles';
+    end if;
+
+    if exists (select 1 from pg_roles where rolname = 'authenticated')
+      and has_function_privilege('authenticated', 'public.rls_auto_enable()', 'EXECUTE') then
+      raise exception 'Supabase security verification failed: rls_auto_enable is executable by API roles';
     end if;
   end if;
 

@@ -28,6 +28,23 @@ describe("scheduler reliability schema contract", () => {
     expect(migration).toContain("grant execute on function complete_scheduled_job");
   });
 
+  test("fixes scheduler function search paths and locks the RLS event helper away from API roles", () => {
+    const migration = readFileSync(
+      new URL("../db/migrations/20260819_supabase_function_hardening_up.sql", import.meta.url),
+      "utf8",
+    );
+
+    expect(migration).toContain(
+      "alter function claim_scheduled_job(text, text, text, integer, integer) set search_path = public",
+    );
+    expect(migration).toContain(
+      "alter function complete_scheduled_job(uuid, text, boolean, text, timestamptz) set search_path = public",
+    );
+    expect(migration).toContain("revoke execute on function public.rls_auto_enable() from public");
+    expect(migration).toContain("revoke execute on function public.rls_auto_enable() from anon");
+    expect(migration).toContain("revoke execute on function public.rls_auto_enable() from authenticated");
+  });
+
   test("provides rollback migrations for scheduler reliability and hardening", () => {
     const schedulerRollback = readFileSync(
       new URL("../db/migrations/20260818_scheduler_reliability_down.sql", import.meta.url),

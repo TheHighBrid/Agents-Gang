@@ -19,6 +19,7 @@ describe("production migration runner", () => {
     expect(sql).toContain("create table if not exists scheduled_jobs");
     expect(sql).toContain("create or replace function claim_scheduled_job");
     expect(sql).toContain("alter table scheduled_jobs enable row level security");
+    expect(sql).toContain("alter function claim_scheduled_job(text, text, text, integer, integer) set search_path = public");
     expect(sql).toContain("Agents-Gang schema verification passed");
     expect(sql).toContain("Agents-Gang Supabase scheduler security verification passed");
     expect(sql).not.toContain("drop table if exists");
@@ -31,6 +32,7 @@ describe("production migration runner", () => {
     const approvalUpgrade = sql.indexOf("approval_requests_status_check");
     const schedulerUpgrade = sql.indexOf("create table if not exists scheduled_jobs");
     const schedulerHardening = sql.indexOf("alter table scheduled_jobs enable row level security");
+    const functionHardening = sql.indexOf("set search_path = public");
     const finalVerify = sql.indexOf("Agents-Gang schema verification passed");
     const securityVerify = sql.indexOf("Agents-Gang Supabase scheduler security verification passed");
 
@@ -38,7 +40,8 @@ describe("production migration runner", () => {
     expect(approvalUpgrade).toBeGreaterThan(baselineGuard);
     expect(schedulerUpgrade).toBeGreaterThan(approvalUpgrade);
     expect(schedulerHardening).toBeGreaterThan(schedulerUpgrade);
-    expect(finalVerify).toBeGreaterThan(schedulerHardening);
+    expect(functionHardening).toBeGreaterThan(schedulerHardening);
+    expect(finalVerify).toBeGreaterThan(functionHardening);
     expect(securityVerify).toBeGreaterThan(finalVerify);
     expect(sql).not.toContain("add column if not exists target_type");
     expect(sql).not.toContain("drop table if exists");
@@ -50,6 +53,7 @@ describe("production migration runner", () => {
       "20260817_approval_consumption",
       "20260818_scheduler_reliability",
       "20260819_supabase_scheduler_hardening",
+      "20260819_supabase_function_hardening",
     ]);
     expect(() => buildUpgradeBundle(root, "unknown-baseline")).toThrow(/Unknown migration baseline/);
   });
@@ -89,6 +93,8 @@ describe("production migration runner", () => {
       "relrowsecurity",
       "PUBLIC can execute scheduler RPCs",
       "service_role lacks scheduler persistence access",
+      "scheduler RPC search_path is mutable",
+      "rls_auto_enable is executable by API roles",
     ]) {
       expect(verification).toContain(expected);
     }
