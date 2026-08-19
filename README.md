@@ -6,6 +6,10 @@ Melato OS is a private, specialist-agent operating system for product-page audit
 
 Apply `db/schema.sql` to a fresh Supabase project. Existing deployments should first apply `db/migrations/20260815_governed_execution_up.sql`. The paired `20260815_governed_execution_down.sql` reverses the migration; use it only after confirming no governed-execution records must be retained.
 
+## Operations runbook
+
+The prepared, explicitly unrehearsed [operations runbook](./docs/OPERATIONS_RUNBOOK.md) describes deployment preflight, mutation disablement, rollback, incident response, and handover. It does not authorize production deployment; follow the release-evidence and founder-decision requirements before operating against live systems.
+
 ## Validation
 
 Run all checks before opening a pull request or declaring a change complete.

@@ -34,7 +34,7 @@ Release proof and material implementation decisions are indexed in the [Release 
 | C5-02 | [#33](https://github.com/TheHighBrid/Agents-Gang/issues/33) | P0 | Chapter 5 - Deployment Readiness and Launch | Codex | C5-01 | Accepted | Fail-closed environment/secret validation, feature isolation, and redaction checks pass. |
 | C5-03 | [#34](https://github.com/TheHighBrid/Agents-Gang/issues/34) | P0 | Chapter 5 - Deployment Readiness and Launch | Codex | C0-01, C5-02 | Blocked | In-repo release gate is merged and exact-head verified. GitHub `main` platform enforcement and a promotable post-merge `main` manifest remain required. |
 | C5-04 | [#35](https://github.com/TheHighBrid/Agents-Gang/issues/35) | P0 | Chapter 5 - Deployment Readiness and Launch | SOL 5.6 | C2-04, C3-05, C4-04, C5-01-C5-03 | Blocked | Staging soak/founder UAT cannot be accepted until C5-03 platform enforcement is verified or an explicit release exception is documented. |
-| C5-05 | [#36](https://github.com/TheHighBrid/Agents-Gang/issues/36) | P0 | Chapter 5 - Deployment Readiness and Launch | Manus Agent | C5-04 | Backlog | Deploy, rollback, incident, and handover runbooks are rehearsal-ready. |
+| C5-05 | [#36](https://github.com/TheHighBrid/Agents-Gang/issues/36) | P0 | Chapter 5 - Deployment Readiness and Launch | Manus Agent | C5-04 | In progress | Deploy, rollback, incident, and handover runbooks are rehearsal-ready. |
 | C5-06 | [#37](https://github.com/TheHighBrid/Agents-Gang/issues/37) | P0 | Chapter 5 - Deployment Readiness and Launch | Manus Agent + founder | C5-01-C5-05 | Backlog | Go/no-go record, controlled deploy, post-deploy verification complete. |
 
 ## Current execution order

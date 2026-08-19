@@ -106,6 +106,21 @@ Use `EV-<TASK-ID>-<NN>` for task evidence, for example `EV-C1-04-01`. Use `RC-01
 - Consequence: C5-03 stays open/Blocked and C5-04 must not start until this evidence exists or an explicit founder-authorized release exception is recorded.
 - Evidence location(s): Issue #34 comments, PR #65 merge, `docs/GITHUB_MAIN_PROTECTION.md`.
 
+### EV-C5-05-01 - Operations runbook preparation
+- Status: In progress
+- Evidence owner: Manus Agent
+- Verification date/time (UTC): 2026-08-19
+- Scope verified: Prepared deployment, mutation-disablement, rollback, incident-response, and handover procedures against the accepted C5-01 migration runner and C5-02 environment-validation contracts.
+- Explicitly out of scope: Production deployment, C5-03 GitHub `main` platform-enforcement verification, C5-04 staging soak/founder UAT, live provider mutation, alert exercise, rollback rehearsal, and founder go/no-go.
+- Test/CI evidence: `tests/operations-runbook.test.ts` protects the required runbook sections, truthful in-progress state, and planned RC-09 posture.
+- Safety and data impact: The runbook prohibits credentials, protected payloads, raw provider errors, and live effects as evidence. Gmail sending remains default-disabled; feature isolation and token revocation/removal provide the documented Gmail/Shopify containment path.
+- Migration/rollback impact: Links the reviewed migration runner, catalog verification, baseline checks, backup prerequisite, and destructive/semantically lossy down-migration cautions.
+- External-effect/idempotency impact: Documents exact draft-send gating, approved Shopify mutation boundaries, and scheduler duplicate/concurrency semantics.
+- Known limitations or unresolved risks: C5-03 GitHub `main` platform enforcement and promotable post-merge evidence are blocked; C5-04 staging/UAT is blocked as a consequence. There is no automated deployment pipeline, public scheduler control, job-health control, or founder release authorization.
+- Reviewer: Pending independent operational review after staging rehearsal.
+- Evidence location(s): [`OPERATIONS_RUNBOOK.md`](./OPERATIONS_RUNBOOK.md), [`DATABASE_MIGRATIONS.md`](./DATABASE_MIGRATIONS.md), [`ENVIRONMENT_CONFIGURATION.md`](./ENVIRONMENT_CONFIGURATION.md), task [C5-05 / #36](https://github.com/TheHighBrid/Agents-Gang/issues/36).
+- RC-09 contribution: Prepared procedure only; status remains Planned until an inspectable alert, rollback, mutation-disablement, and runbook-rehearsal record exists.
+
 ## Chapter acceptance index
 
 Use this table as the chapter-level roll-up. Do not mark a chapter `Verified` until its exit gate is proven and the referenced evidence is inspectable.
