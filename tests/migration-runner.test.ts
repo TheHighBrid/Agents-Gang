@@ -12,7 +12,7 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("production migration runner", () => {
-  test("builds a fresh-install bundle from schema plus hardening and non-destructive verification", () => {
+  test("builds a fresh-install bundle from schema plus hardening, verification, and rollback-only smoke", () => {
     const sql = buildFreshBundle(root);
 
     expect(sql).toContain("create table if not exists approval_requests");
@@ -20,8 +20,11 @@ describe("production migration runner", () => {
     expect(sql).toContain("create or replace function claim_scheduled_job");
     expect(sql).toContain("alter table scheduled_jobs enable row level security");
     expect(sql).toContain("alter function claim_scheduled_job(text, text, text, integer, integer) set search_path = public");
+    expect(sql).toContain("on conflict on constraint scheduled_jobs_idempotency_key_key do update");
     expect(sql).toContain("Agents-Gang schema verification passed");
     expect(sql).toContain("Agents-Gang Supabase scheduler security verification passed");
+    expect(sql).toContain("Scheduler smoke failed");
+    expect(sql).toContain("rollback;");
     expect(sql).not.toContain("drop table if exists");
   });
 
@@ -33,16 +36,20 @@ describe("production migration runner", () => {
     const schedulerUpgrade = sql.indexOf("create table if not exists scheduled_jobs");
     const schedulerHardening = sql.indexOf("alter table scheduled_jobs enable row level security");
     const functionHardening = sql.indexOf("set search_path = public");
+    const runtimeFix = sql.indexOf("on conflict on constraint scheduled_jobs_idempotency_key_key do update");
     const finalVerify = sql.indexOf("Agents-Gang schema verification passed");
     const securityVerify = sql.indexOf("Agents-Gang Supabase scheduler security verification passed");
+    const schedulerSmoke = sql.indexOf("Scheduler smoke failed");
 
     expect(baselineGuard).toBeGreaterThanOrEqual(0);
     expect(approvalUpgrade).toBeGreaterThan(baselineGuard);
     expect(schedulerUpgrade).toBeGreaterThan(approvalUpgrade);
     expect(schedulerHardening).toBeGreaterThan(schedulerUpgrade);
     expect(functionHardening).toBeGreaterThan(schedulerHardening);
-    expect(finalVerify).toBeGreaterThan(functionHardening);
+    expect(runtimeFix).toBeGreaterThan(functionHardening);
+    expect(finalVerify).toBeGreaterThan(runtimeFix);
     expect(securityVerify).toBeGreaterThan(finalVerify);
+    expect(schedulerSmoke).toBeGreaterThan(securityVerify);
     expect(sql).not.toContain("add column if not exists target_type");
     expect(sql).not.toContain("drop table if exists");
   });
@@ -54,6 +61,7 @@ describe("production migration runner", () => {
       "20260818_scheduler_reliability",
       "20260819_supabase_scheduler_hardening",
       "20260819_supabase_function_hardening",
+      "20260819_scheduler_rpc_runtime_fix",
     ]);
     expect(() => buildUpgradeBundle(root, "unknown-baseline")).toThrow(/Unknown migration baseline/);
   });

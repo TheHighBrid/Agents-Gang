@@ -14,6 +14,7 @@ export const migrationBaselines = Object.freeze([
   "20260818_scheduler_reliability",
   "20260819_supabase_scheduler_hardening",
   "20260819_supabase_function_hardening",
+  "20260819_scheduler_rpc_runtime_fix",
 ]);
 
 const forwardMigrations = Object.freeze([
@@ -22,6 +23,7 @@ const forwardMigrations = Object.freeze([
   "20260818_scheduler_reliability",
   "20260819_supabase_scheduler_hardening",
   "20260819_supabase_function_hardening",
+  "20260819_scheduler_rpc_runtime_fix",
 ]);
 
 function read(root, path) {
@@ -36,6 +38,10 @@ function securityVerification(root) {
   return section("Supabase security verification", read(root, "db/verify-supabase-security.sql"));
 }
 
+function schedulerSmoke(root) {
+  return section("scheduler RPC smoke", read(root, "db/smoke-scheduler.sql"));
+}
+
 export function buildFreshBundle(root = defaultRoot) {
   return [
     "\\set ON_ERROR_STOP on\n",
@@ -48,8 +54,13 @@ export function buildFreshBundle(root = defaultRoot) {
       "forward 20260819_supabase_function_hardening",
       read(root, "db/migrations/20260819_supabase_function_hardening_up.sql"),
     ),
+    section(
+      "forward 20260819_scheduler_rpc_runtime_fix",
+      read(root, "db/migrations/20260819_scheduler_rpc_runtime_fix_up.sql"),
+    ),
     section("final verification", read(root, "db/verify.sql")),
     securityVerification(root),
+    schedulerSmoke(root),
   ].join("");
 }
 
@@ -67,6 +78,7 @@ export function buildUpgradeBundle(root = defaultRoot, baseline) {
     )),
     section("final verification", read(root, "db/verify.sql")),
     securityVerification(root),
+    schedulerSmoke(root),
   ].join("");
 }
 
@@ -165,7 +177,11 @@ function baselineGuardSql(baseline) {
     return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: scheduler hardening objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_class\n    where oid = 'public.scheduled_jobs'::regclass\n      and relrowsecurity\n  ) then\n    raise exception 'Baseline mismatch: scheduler hardening RLS is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_supabase_scheduler_hardening verified';\nend $$;`;
   }
 
-  return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: Supabase function hardening objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_proc\n    where oid = 'public.claim_scheduled_job(text,text,text,integer,integer)'::regprocedure\n      and proconfig @> array['search_path=public']\n  ) or not exists (\n    select 1 from pg_proc\n    where oid = 'public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)'::regprocedure\n      and proconfig @> array['search_path=public']\n  ) then\n    raise exception 'Baseline mismatch: Supabase function search_path hardening is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_supabase_function_hardening verified';\nend $$;`;
+  if (baseline === "20260819_supabase_function_hardening") {
+    return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: Supabase function hardening objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_proc\n    where oid = 'public.claim_scheduled_job(text,text,text,integer,integer)'::regprocedure\n      and proconfig @> array['search_path=public']\n  ) or not exists (\n    select 1 from pg_proc\n    where oid = 'public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)'::regprocedure\n      and proconfig @> array['search_path=public']\n  ) then\n    raise exception 'Baseline mismatch: Supabase function search_path hardening is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_supabase_function_hardening verified';\nend $$;`;
+  }
+
+  return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null then\n    raise exception 'Baseline mismatch: scheduler RPC runtime fix objects are incomplete';\n  end if;\n  if pg_get_functiondef('public.claim_scheduled_job(text,text,text,integer,integer)'::regprocedure)\n      not ilike '%on conflict on constraint scheduled_jobs_idempotency_key_key do update%' then\n    raise exception 'Baseline mismatch: scheduler RPC runtime conflict fix is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_scheduler_rpc_runtime_fix verified';\nend $$;`;
 }
 
 function assertKnownBaseline(baseline) {

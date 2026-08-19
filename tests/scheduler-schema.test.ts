@@ -45,6 +45,20 @@ describe("scheduler reliability schema contract", () => {
     expect(migration).toContain("revoke execute on function public.rls_auto_enable() from authenticated");
   });
 
+  test("uses an unambiguous scheduler conflict target and executes RPC smoke coverage", () => {
+    const migration = readFileSync(
+      new URL("../db/migrations/20260819_scheduler_rpc_runtime_fix_up.sql", import.meta.url),
+      "utf8",
+    );
+    const smoke = readFileSync(new URL("../db/smoke-scheduler.sql", import.meta.url), "utf8");
+
+    expect(migration).toContain("on conflict on constraint scheduled_jobs_idempotency_key_key do update");
+    expect(migration).toContain("set search_path = public");
+    expect(smoke).toContain("claim_scheduled_job");
+    expect(smoke).toContain("complete_scheduled_job");
+    expect(smoke).toContain("rollback;");
+  });
+
   test("provides rollback migrations for scheduler reliability and hardening", () => {
     const schedulerRollback = readFileSync(
       new URL("../db/migrations/20260818_scheduler_reliability_down.sql", import.meta.url),
