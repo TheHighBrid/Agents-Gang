@@ -41,6 +41,15 @@ function signaturesMatch(supplied: string, expected: string) {
   return suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer);
 }
 
+export function founderAccessSecretMatches(supplied: string, configured: string | undefined) {
+  const candidate = supplied.trim();
+  const expected = normalizeSigningKey(configured);
+  if (!candidate || !expected) return false;
+  const candidateBuffer = Buffer.from(candidate, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
 export function createFounderSessionToken(claims: FounderSessionClaims, secret: string) {
   const signingKey = normalizeSigningKey(secret);
   if (!signingKey) throw new Error("Founder auth secret is required");
