@@ -13,6 +13,7 @@ export const migrationBaselines = Object.freeze([
   "20260817_approval_consumption",
   "20260818_scheduler_reliability",
   "20260819_supabase_scheduler_hardening",
+  "20260819_supabase_function_hardening",
 ]);
 
 const forwardMigrations = Object.freeze([
@@ -20,6 +21,7 @@ const forwardMigrations = Object.freeze([
   "20260817_approval_consumption",
   "20260818_scheduler_reliability",
   "20260819_supabase_scheduler_hardening",
+  "20260819_supabase_function_hardening",
 ]);
 
 function read(root, path) {
@@ -41,6 +43,10 @@ export function buildFreshBundle(root = defaultRoot) {
     section(
       "forward 20260819_supabase_scheduler_hardening",
       read(root, "db/migrations/20260819_supabase_scheduler_hardening_up.sql"),
+    ),
+    section(
+      "forward 20260819_supabase_function_hardening",
+      read(root, "db/migrations/20260819_supabase_function_hardening_up.sql"),
     ),
     section("final verification", read(root, "db/verify.sql")),
     securityVerification(root),
@@ -155,7 +161,11 @@ function baselineGuardSql(baseline) {
     return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: scheduler reliability objects are incomplete';\n  end if;\n  raise notice 'Agents-Gang baseline 20260818_scheduler_reliability verified';\nend $$;`;
   }
 
-  return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: scheduler hardening objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_class\n    where oid = 'public.scheduled_jobs'::regclass\n      and relrowsecurity\n  ) then\n    raise exception 'Baseline mismatch: scheduler hardening RLS is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_supabase_scheduler_hardening verified';\nend $$;`;
+  if (baseline === "20260819_supabase_scheduler_hardening") {
+    return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: scheduler hardening objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_class\n    where oid = 'public.scheduled_jobs'::regclass\n      and relrowsecurity\n  ) then\n    raise exception 'Baseline mismatch: scheduler hardening RLS is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_supabase_scheduler_hardening verified';\nend $$;`;
+  }
+
+  return `do $$\nbegin\n  if to_regclass('public.scheduled_jobs') is null\n    or to_regprocedure('public.claim_scheduled_job(text,text,text,integer,integer)') is null\n    or to_regprocedure('public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)') is null then\n    raise exception 'Baseline mismatch: Supabase function hardening objects are incomplete';\n  end if;\n  if not exists (\n    select 1 from pg_proc\n    where oid = 'public.claim_scheduled_job(text,text,text,integer,integer)'::regprocedure\n      and proconfig @> array['search_path=public']\n  ) or not exists (\n    select 1 from pg_proc\n    where oid = 'public.complete_scheduled_job(uuid,text,boolean,text,timestamp with time zone)'::regprocedure\n      and proconfig @> array['search_path=public']\n  ) then\n    raise exception 'Baseline mismatch: Supabase function search_path hardening is missing';\n  end if;\n  raise notice 'Agents-Gang baseline 20260819_supabase_function_hardening verified';\nend $$;`;
 }
 
 function assertKnownBaseline(baseline) {
