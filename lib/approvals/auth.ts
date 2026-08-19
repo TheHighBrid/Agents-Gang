@@ -30,6 +30,11 @@ function sign(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
+function normalizeSigningKey(secret: string | undefined) {
+  const normalized = secret?.trim();
+  return normalized ? normalized : null;
+}
+
 function signaturesMatch(supplied: string, expected: string) {
   const suppliedBuffer = Buffer.from(supplied);
   const expectedBuffer = Buffer.from(expected);
@@ -37,9 +42,10 @@ function signaturesMatch(supplied: string, expected: string) {
 }
 
 export function createFounderSessionToken(claims: FounderSessionClaims, secret: string) {
-  if (!secret.trim()) throw new Error("Founder auth secret is required");
+  const signingKey = normalizeSigningKey(secret);
+  if (!signingKey) throw new Error("Founder auth secret is required");
   const payload = encode(JSON.stringify(claims));
-  return `${TOKEN_VERSION}.${payload}.${sign(`${TOKEN_VERSION}.${payload}`, secret)}`;
+  return `${TOKEN_VERSION}.${payload}.${sign(`${TOKEN_VERSION}.${payload}`, signingKey)}`;
 }
 
 function resolveSignedIdentity(
@@ -47,7 +53,8 @@ function resolveSignedIdentity(
   secret: string | undefined,
   options: { now?: number; revokedSessionIds?: ReadonlySet<string> } = {},
 ): IdentityResolution {
-  if (!secret?.trim()) return { ok: false, reason: "unauthorized" };
+  const signingKey = normalizeSigningKey(secret);
+  if (!signingKey) return { ok: false, reason: "unauthorized" };
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Bearer ")) return { ok: false, reason: "unauthorized" };
 
@@ -56,7 +63,7 @@ function resolveSignedIdentity(
   if (parts.length !== 3 || parts[0] !== TOKEN_VERSION) return { ok: false, reason: "unauthorized" };
   const [version, encodedClaims, suppliedSignature] = parts;
   const signedPayload = `${version}.${encodedClaims}`;
-  if (!signaturesMatch(suppliedSignature, sign(signedPayload, secret))) return { ok: false, reason: "unauthorized" };
+  if (!signaturesMatch(suppliedSignature, sign(signedPayload, signingKey))) return { ok: false, reason: "unauthorized" };
 
   let claims: FounderSessionClaims;
   try {
