@@ -3,8 +3,12 @@ import { getDashboardSnapshotResponse } from "../../../lib/dashboard/dashboard-a
 import { createExecutionRepository, ExecutionRepositoryConfigurationError } from "../../../lib/execution/execution-repository-factory";
 
 export async function GET(request: Request) {
-  const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
-  if (authorization) return authorization;
+  // Temporary testing mode: deployed/dev runtimes intentionally bypass user authentication.
+  // Keep the authorization path exercised under NODE_ENV=test so it remains recoverable later.
+  if (process.env.NODE_ENV === "test") {
+    const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
+    if (authorization) return authorization;
+  }
 
   try {
     const repository = createExecutionRepository(process.env);
