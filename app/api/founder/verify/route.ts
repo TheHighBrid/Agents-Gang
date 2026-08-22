@@ -12,8 +12,11 @@ function noStore(response: Response) {
 
 export async function GET(request: Request) {
   const authorization = authorizeFounderRequest(request, process.env);
-  const denied = founderAuthorizationResponse(authorization);
-  if (denied) return noStore(denied);
+  if (!authorization.ok) {
+    const denied = founderAuthorizationResponse(authorization);
+    if (!denied) throw new Error("Founder authorization failure did not produce a response");
+    return noStore(denied);
+  }
 
   return Response.json(
     {
