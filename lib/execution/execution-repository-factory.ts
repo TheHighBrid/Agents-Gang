@@ -22,16 +22,30 @@ function createSupabaseRequest(serviceRoleKey: string) {
   };
 }
 
+function resolveSupabaseServerKey(environment: ExecutionEnvironment) {
+  const modernSecret = environment.SUPABASE_SECRET_KEY?.trim();
+  if (modernSecret?.startsWith("sb_secret_")) return modernSecret;
+
+  const legacyServiceRoleKey = environment.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (legacyServiceRoleKey) return legacyServiceRoleKey;
+
+  throw new ExecutionRepositoryConfigurationError(
+    "SUPABASE_URL and a Supabase server key are required for governed execution",
+  );
+}
+
 export function createExecutionRepository(environment: ExecutionEnvironment): ExecutionRepository {
-  if (!environment.SUPABASE_URL || !environment.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!environment.SUPABASE_URL) {
     throw new ExecutionRepositoryConfigurationError(
-      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for governed execution",
+      "SUPABASE_URL and a Supabase server key are required for governed execution",
     );
   }
 
+  const serverKey = resolveSupabaseServerKey(environment);
+
   return createSupabaseExecutionRepository({
     url: environment.SUPABASE_URL,
-    serviceRoleKey: environment.SUPABASE_SERVICE_ROLE_KEY,
-    request: createSupabaseRequest(environment.SUPABASE_SERVICE_ROLE_KEY),
+    serviceRoleKey: serverKey,
+    request: createSupabaseRequest(serverKey),
   });
 }
