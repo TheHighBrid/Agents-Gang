@@ -15,10 +15,29 @@ export class ExecutionRepositoryConfigurationError extends Error {
 function createSupabaseRequest(serviceRoleKey: string) {
   if (!serviceRoleKey.startsWith("sb_secret_")) return fetch;
 
-  return (input: RequestInfo | URL, init?: RequestInit) => {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
     headers.delete("Authorization");
-    return fetch(input, { ...init, headers });
+    const response = await fetch(input, { ...init, headers });
+
+    if (process.env.VERCEL_ENV === "preview" && !response.ok) {
+      let error = "unknown";
+      try {
+        const text = await response.clone().text();
+        try {
+          const parsed = JSON.parse(text) as Record<string, unknown>;
+          const candidate = parsed.message ?? parsed.error ?? parsed.code;
+          if (typeof candidate === "string") error = candidate.slice(0, 160);
+        } catch {
+          error = text.slice(0, 160) || "empty";
+        }
+      } catch {
+        error = "unreadable";
+      }
+      console.info("supabase-response-diagnostic", { status: response.status, error });
+    }
+
+    return response;
   };
 }
 
