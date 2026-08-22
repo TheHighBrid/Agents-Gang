@@ -60,15 +60,15 @@ describe("staging founder sign-in", () => {
     expect(unavailable.status).toBe(404);
   });
 
-  test("deployed dashboard skips founder sign-in while the app is in testing mode", () => {
+  test("deployed dashboard exchanges the founder access secret for an in-memory session", () => {
     const page = readFileSync(join(root, "app/dashboard/page.tsx"), "utf8");
-    expect(page).toContain("Authentication disabled");
+    expect(page).toContain("Founder access secret");
+    expect(page).toContain("/api/founder/session");
     expect(page).toContain("/api/dashboard");
-    expect(page).toContain("Refresh operations");
-    expect(page).not.toContain("Founder access secret");
-    expect(page).not.toContain("/api/founder/session");
-    expect(page).not.toContain("Sign in and load operations");
-    expect(page).not.toContain("Founder session token");
-    expect(page).not.toContain("Paste signed session");
+    expect(page).toContain("Sign in and load operations");
+    expect(page).toContain("Authorization: `Bearer ${session}`");
+    expect(page).not.toContain("Authentication disabled");
+    expect(page).not.toContain("localStorage");
+    expect(page).not.toContain("sessionStorage");
   });
 });
