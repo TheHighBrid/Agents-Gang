@@ -29,7 +29,8 @@ export async function GET() {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  const raw = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
+  const rawUntrimmed = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  const raw = rawUntrimmed.trim();
   let kind: CredentialKind = "unknown";
   if (!raw) kind = "missing";
   else if (raw.startsWith("sb_secret_")) kind = "modern_secret";
@@ -42,6 +43,12 @@ export async function GET() {
   return Response.json({
     configured: Boolean(raw),
     kind,
+    length: raw.length,
+    equalsVariableName: raw === "SUPABASE_SERVICE_ROLE_KEY",
+    hasAssignmentPrefix: raw.startsWith("SUPABASE_SERVICE_ROLE_KEY="),
+    hasSurroundingWhitespace: rawUntrimmed !== raw,
+    startsWithSbPrefix: raw.startsWith("sb_"),
+    startsLikeJwt: raw.startsWith("eyJ"),
     legacyRole: decoded?.role ?? null,
     legacyProjectRefMatchesUrl: decoded?.ref && expectedRef ? decoded.ref === expectedRef : null,
   }, {
