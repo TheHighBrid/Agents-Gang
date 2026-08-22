@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { ExecutionRepository } from "./repository";
 import { createSupabaseExecutionRepository } from "./supabase-repository";
 
@@ -50,11 +52,40 @@ function classifyServerKey(value: string | undefined) {
   };
 }
 
+function secretChecksumMatchesProject(key: string | undefined, url: string | undefined) {
+  const raw = key?.trim() ?? "";
+  if (!raw.startsWith("sb_secret_") || !url) return undefined;
+
+  const separator = raw.lastIndexOf("_");
+  if (separator <= "sb_secret_".length) return false;
+
+  let projectRef: string;
+  try {
+    projectRef = new URL(url).hostname.split(".")[0] ?? "";
+  } catch {
+    return undefined;
+  }
+  if (!projectRef) return undefined;
+
+  const intermediate = raw.slice(0, separator);
+  const actualChecksum = raw.slice(separator + 1);
+  const expectedChecksum = createHash("sha256")
+    .update(`${projectRef}|${intermediate}`)
+    .digest("base64url")
+    .slice(0, 8);
+
+  return actualChecksum === expectedChecksum;
+}
+
 function resolveSupabaseServerKey(environment: ExecutionEnvironment) {
   if (environment.VERCEL_ENV === "preview") {
     console.info("supabase-server-key-shape", {
       modern: classifyServerKey(environment.SUPABASE_SECRET_KEY),
       legacy: classifyServerKey(environment.SUPABASE_SERVICE_ROLE_KEY),
+      modernChecksumMatchesProject: secretChecksumMatchesProject(
+        environment.SUPABASE_SECRET_KEY,
+        environment.SUPABASE_URL,
+      ),
     });
   }
 
