@@ -39,14 +39,14 @@ describe("founder job health dashboard", () => {
     expect(page).not.toContain("audit.metadata");
   });
 
-  test("keeps job-health state accessible without relying on authentication UI", () => {
+  test("keeps job-health state accessible behind founder authentication", () => {
     const page = read("app/dashboard/page.tsx");
 
     expect(page).toContain("aria-labelledby=\"job-health-heading\"");
     expect(page).toContain("aria-labelledby=\"operational-alerts-heading\"");
     expect(page).toContain("role=\"status\"");
     expect(page).toContain("status-badge");
-    expect(page).toContain("Authentication disabled");
-    expect(page).not.toContain("Founder access secret");
+    expect(page).toContain("Founder access secret");
+    expect(page).not.toContain("Authentication disabled");
   });
 });
