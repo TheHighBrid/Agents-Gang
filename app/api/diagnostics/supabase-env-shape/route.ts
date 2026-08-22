@@ -1,4 +1,5 @@
 // Preview-only Supabase server-key diagnostic. Never returns credential material.
+// Fresh deployment trigger after regenerating the Supabase secret key.
 function classify(value: string | undefined) {
   const raw = (value ?? "").trim();
   return {
