@@ -8,6 +8,10 @@ if (process.env.VERCEL_ENV === "preview") {
   const projectPublishable = "sb_publishable_DjGaNL1kjDyeQ1ydWV2wSw_rJ80O5b_";
 
   function classify(value) {
+    const allowedCharset = /^[A-Za-z0-9_-]+$/.test(value);
+    const containsMaskChars = /[*•·…\.]/u.test(value);
+    const containsWhitespace = /\s/u.test(value);
+    const secretParts = value.startsWith("sb_secret_") ? value.split("_") : [];
     return {
       configured: Boolean(value),
       kind: !value
@@ -20,6 +24,15 @@ if (process.env.VERCEL_ENV === "preview") {
               ? "legacy_jwt"
               : "unknown",
       length: value.length,
+      allowedCharset,
+      containsMaskChars,
+      containsWhitespace,
+      secretShapeValid:
+        value.startsWith("sb_secret_") &&
+        secretParts.length === 4 &&
+        secretParts[2]?.length === 22 &&
+        secretParts[3]?.length === 8 &&
+        allowedCharset,
     };
   }
 
