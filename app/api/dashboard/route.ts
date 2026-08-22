@@ -7,7 +7,9 @@ export async function GET(request: Request) {
   if (authorization) return authorization;
 
   try {
-    const repository = createExecutionRepository(process.env);
+    const repository = createExecutionRepository(process.env, {
+      founderAuthorization: request.headers.get("authorization") ?? undefined,
+    });
     return await getDashboardSnapshotResponse(repository);
   } catch (error) {
     if (error instanceof ExecutionRepositoryConfigurationError) {
