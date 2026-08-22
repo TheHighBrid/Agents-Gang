@@ -19,43 +19,68 @@ if (process.env.VERCEL_ENV === "preview") {
   const encodedClaims = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
   const signedPayload = `v1.${encodedClaims}`;
   const signature = createHmac("sha256", founderSecret).update(signedPayload).digest("base64url");
-  const token = `${signedPayload}.${signature}`;
+  const authorization = `Bearer ${signedPayload}.${signature}`;
+  const bridgeUrl = `${supabaseUrl}/functions/v1/agents-gang-persistence-bridge`;
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/agents-gang-persistence-bridge`, {
-    method: "POST",
-    headers: {
+  const readPaths = [
+    "/agent_runs?select=*&order=created_at.desc",
+    "/routing_decisions?select=*&order=created_at.desc",
+    "/tool_calls?select=*&order=created_at.desc",
+    "/audit_events?select=*&order=created_at.desc",
+    "/approval_requests?select=*&order=created_at.desc,id.desc",
+    "/scheduled_jobs?select=*&order=created_at.desc",
+  ];
+
+  async function call(body, auth = authorization) {
+    const headers = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
       "User-Agent": "agents-gang-preview-bridge-smoke",
-    },
-    body: JSON.stringify({
-      path: "/agent_runs?select=*&order=created_at.desc",
-      method: "GET",
-    }),
-    cache: "no-store",
-  });
-
-  let rowCount = null;
-  let responseKind = "unknown";
-  try {
-    const body = await response.json();
-    if (Array.isArray(body)) {
-      rowCount = body.length;
-      responseKind = "array";
-    } else if (body && typeof body === "object") {
-      responseKind = "object";
+    };
+    if (auth) headers.Authorization = auth;
+    const response = await fetch(bridgeUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    let kind = "unknown";
+    let rowCount = null;
+    try {
+      const parsed = await response.json();
+      if (Array.isArray(parsed)) {
+        kind = "array";
+        rowCount = parsed.length;
+      } else if (parsed && typeof parsed === "object") {
+        kind = "object";
+      }
+    } catch {
+      kind = "non_json";
     }
-  } catch {
-    responseKind = "non_json";
+    return { status: response.status, kind, rowCount };
   }
 
-  console.log("PERSISTENCE_BRIDGE_SMOKE", JSON.stringify({
-    status: response.status,
-    responseKind,
-    rowCount,
+  const reads = [];
+  for (const path of readPaths) {
+    const result = await call({ path, method: "GET" });
+    reads.push({ path: path.split("?")[0], ...result });
+    if (result.status !== 200 || result.kind !== "array") {
+      throw new Error(`Persistence bridge read smoke failed for ${path.split("?")[0]} with status ${result.status}`);
+    }
+  }
+
+  const unauthorized = await call({ path: readPaths[0], method: "GET" }, "");
+  if (unauthorized.status !== 401) {
+    throw new Error(`Persistence bridge unauthorized boundary returned ${unauthorized.status}`);
+  }
+
+  const writeBlocked = await call({ path: "/agent_runs", method: "POST" });
+  if (writeBlocked.status !== 403) {
+    throw new Error(`Persistence bridge write boundary returned ${writeBlocked.status}`);
+  }
+
+  console.log("PERSISTENCE_BRIDGE_MATRIX", JSON.stringify({
+    reads,
+    unauthorizedStatus: unauthorized.status,
+    writeBlockedStatus: writeBlocked.status,
   }));
-
-  if (response.status !== 200 || responseKind !== "array") {
-    throw new Error(`Persistence bridge smoke failed with status ${response.status}`);
-  }
 }
