@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   try {
     const repository = createExecutionRepository(process.env);
-    return getDashboardSnapshotResponse(repository);
+    return await getDashboardSnapshotResponse(repository);
   } catch (error) {
     if (error instanceof ExecutionRepositoryConfigurationError) {
       return Response.json({ error: "Execution storage is not configured" }, { status: 503 });
