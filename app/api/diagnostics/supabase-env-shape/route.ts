@@ -1,4 +1,4 @@
-// Fresh preview deployment probe after Vercel secret update.
+// Fresh preview deployment probe after Preview secret scope update.
 function classify(value: string | undefined) {
   const raw = (value ?? "").trim();
   return {
