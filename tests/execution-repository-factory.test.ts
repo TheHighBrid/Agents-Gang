@@ -37,6 +37,27 @@ describe("execution repository factory", () => {
     expect(headers.has("Authorization")).toBe(false);
   });
 
+  test("prefers the modern SUPABASE_SECRET_KEY env when present", async () => {
+    const requests: RequestInit[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(init ?? {});
+      return new Response("[]", { status: 200 });
+    });
+
+    const modernSecret = "sb_secret_modern-test";
+    const repository = createExecutionRepository({
+      SUPABASE_URL: "https://project.supabase.co",
+      SUPABASE_SECRET_KEY: modernSecret,
+      SUPABASE_SERVICE_ROLE_KEY: "legacy-or-invalid-value",
+    });
+
+    await repository.listApprovals();
+
+    const headers = new Headers(requests[0]?.headers);
+    expect(headers.get("apikey")).toBe(modernSecret);
+    expect(headers.has("Authorization")).toBe(false);
+  });
+
   test("keeps bearer authorization for legacy service_role JWT keys", async () => {
     const requests: RequestInit[] = [];
     vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
