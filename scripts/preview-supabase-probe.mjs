@@ -70,6 +70,31 @@ if (process.env.VERCEL_ENV === "preview") {
     }
   }
 
+  async function compareToSupabaseInventory() {
+    if (!secret || !url) return { status: 0, error: "not_configured" };
+    try {
+      const response = await fetch(`${url}/functions/v1/c5-04-key-fingerprint`, {
+        headers: {
+          "x-candidate-key": secret,
+          "User-Agent": "agents-gang-vercel-build-probe",
+        },
+        cache: "no-store",
+      });
+      const body = await response.json();
+      return {
+        status: response.status,
+        candidateKind: body?.candidateKind,
+        candidateLength: body?.candidateLength,
+        activeNames: Array.isArray(body?.activeNames) ? body.activeNames : [],
+        matchedNames: Array.isArray(body?.matchedNames) ? body.matchedNames : [],
+        matchedModernSecret: Boolean(body?.matchedModernSecret),
+        matchedLegacyServiceRole: Boolean(body?.matchedLegacyServiceRole),
+      };
+    } catch {
+      return { status: 0, error: "request_failed" };
+    }
+  }
+
   const result = {
     secret: classify(secret),
     vercelPublishable: classify(vercelPublishable),
@@ -78,6 +103,7 @@ if (process.env.VERCEL_ENV === "preview") {
       secretWithMatchingAuthorization: await probe(secret, true),
       vercelPublishableApikeyOnly: await probe(vercelPublishable, false),
       projectPublishableControl: await probe(projectPublishable, false),
+      activeInventoryComparison: await compareToSupabaseInventory(),
     },
   };
 
