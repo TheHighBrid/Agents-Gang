@@ -1,67 +1,72 @@
-import { createHash } from "node:crypto";
-
 if (process.env.VERCEL_ENV === "preview") {
-  const key = (process.env.SUPABASE_SECRET_KEY ?? "").trim();
   const url = (process.env.SUPABASE_URL ?? "").trim().replace(/\/$/, "");
-  const kind = !key
-    ? "missing"
-    : key.startsWith("sb_secret_")
-      ? "modern_secret"
-      : key.startsWith("sb_publishable_")
-        ? "modern_publishable"
-        : "unknown";
+  const secret = (process.env.SUPABASE_SECRET_KEY ?? "").trim();
+  const vercelPublishable = (process.env.SUPABASE_PUBLISHABLE_KEY ?? "").trim();
 
-  let checksumMatchesProject;
-  if (kind === "modern_secret" && url) {
+  // Public by design. Used only as a control to prove whether this project's
+  // hosted API gateway accepts its currently active modern publishable key.
+  const projectPublishable = "sb_publishable_DjGaNL1kjDyeQ1ydWV2wSw_rJ80O5b_";
+
+  function classify(value) {
+    return {
+      configured: Boolean(value),
+      kind: !value
+        ? "missing"
+        : value.startsWith("sb_secret_")
+          ? "modern_secret"
+          : value.startsWith("sb_publishable_")
+            ? "modern_publishable"
+            : value.startsWith("eyJ") && value.split(".").length === 3
+              ? "legacy_jwt"
+              : "unknown",
+      length: value.length,
+    };
+  }
+
+  async function probe(key, includeMatchingAuthorization = false) {
+    if (!key || !url) return { status: 0, error: "not_configured" };
+
     try {
-      const projectRef = new URL(url).hostname.split(".")[0] ?? "";
-      const separator = key.lastIndexOf("_");
-      const intermediate = key.slice(0, separator);
-      const actual = key.slice(separator + 1);
-      const expected = createHash("sha256")
-        .update(`${projectRef}|${intermediate}`)
-        .digest("base64url")
-        .slice(0, 8);
-      checksumMatchesProject = actual === expected;
+      const headers = {
+        apikey: key,
+        "User-Agent": "agents-gang-vercel-build-probe",
+      };
+      if (includeMatchingAuthorization) {
+        headers.Authorization = `Bearer ${key}`;
+      }
+
+      const response = await fetch(`${url}/rest/v1/`, {
+        headers,
+        cache: "no-store",
+      });
+
+      if (response.ok) return { status: response.status, error: "none" };
+
+      const text = await response.text();
+      let error = text.slice(0, 120) || "empty";
+      try {
+        const parsed = JSON.parse(text);
+        const candidate = parsed?.message ?? parsed?.error ?? parsed?.code;
+        if (typeof candidate === "string") error = candidate.slice(0, 120);
+      } catch {
+        // Keep bounded plain text only.
+      }
+      return { status: response.status, error };
     } catch {
-      checksumMatchesProject = undefined;
+      return { status: 0, error: "request_failed" };
     }
   }
 
   const result = {
-    configured: Boolean(key),
-    kind,
-    length: key.length,
-    checksumMatchesProject,
-    status: 0,
-    error: "not_tested",
+    secret: classify(secret),
+    vercelPublishable: classify(vercelPublishable),
+    tests: {
+      secretApikeyOnly: await probe(secret, false),
+      secretWithMatchingAuthorization: await probe(secret, true),
+      vercelPublishableApikeyOnly: await probe(vercelPublishable, false),
+      projectPublishableControl: await probe(projectPublishable, false),
+    },
   };
 
-  if (key && url) {
-    try {
-      const response = await fetch(`${url}/rest/v1/`, {
-        headers: { apikey: key, "User-Agent": "agents-gang-vercel-build-probe" },
-        cache: "no-store",
-      });
-      result.status = response.status;
-      if (response.ok) {
-        result.error = "none";
-      } else {
-        const text = await response.text();
-        let error = text.slice(0, 120) || "empty";
-        try {
-          const parsed = JSON.parse(text);
-          const candidate = parsed?.message ?? parsed?.error ?? parsed?.code;
-          if (typeof candidate === "string") error = candidate.slice(0, 120);
-        } catch {
-          // Keep bounded plain text only.
-        }
-        result.error = error;
-      }
-    } catch {
-      result.error = "request_failed";
-    }
-  }
-
-  console.log("SUPABASE_BUILD_PROBE", JSON.stringify(result));
+  console.log("SUPABASE_BUILD_PROBE_MATRIX", JSON.stringify(result));
 }
