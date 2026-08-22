@@ -11,6 +11,8 @@ describe("dashboard founder authorization boundary", () => {
     expect(route).toContain("authorizeFounderRequest(request, process.env)");
     expect(route).toContain("founderAuthorizationResponse");
     expect(route).not.toContain('process.env.NODE_ENV === "test"');
-    expect(route.indexOf("authorizeFounderRequest(request, process.env)")).toBeLessThan(route.indexOf("createExecutionRepository(process.env)"));
+    expect(route.indexOf("authorizeFounderRequest(request, process.env)")).toBeLessThan(
+      route.indexOf("createExecutionRepository(process.env"),
+    );
   });
 });
