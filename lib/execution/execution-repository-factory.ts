@@ -22,7 +22,23 @@ function createSupabaseRequest(serviceRoleKey: string) {
   };
 }
 
+function classifyServerKey(value: string | undefined) {
+  const raw = value?.trim() ?? "";
+  return {
+    configured: Boolean(raw),
+    kind: !raw ? "missing" : raw.startsWith("sb_secret_") ? "modern_secret" : raw.startsWith("sb_publishable_") ? "modern_publishable" : raw.startsWith("eyJ") && raw.split(".").length === 3 ? "legacy_jwt" : "unknown",
+    length: raw.length,
+  };
+}
+
 function resolveSupabaseServerKey(environment: ExecutionEnvironment) {
+  if (environment.VERCEL_ENV === "preview") {
+    console.info("supabase-server-key-shape", {
+      modern: classifyServerKey(environment.SUPABASE_SECRET_KEY),
+      legacy: classifyServerKey(environment.SUPABASE_SERVICE_ROLE_KEY),
+    });
+  }
+
   const modernSecret = environment.SUPABASE_SECRET_KEY?.trim();
   if (modernSecret?.startsWith("sb_secret_")) return modernSecret;
 
