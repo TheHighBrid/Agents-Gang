@@ -28,10 +28,16 @@ describe("deployment environment validation", () => {
     expect(result.disabledFeatures).toEqual(expect.arrayContaining(["ai", "shopify", "gmail", "web_search", "inbox_alerts"]));
   });
 
-  test("requires core governance configuration in staging and production", () => {
-    const result = validateDeploymentEnvironment(base({ SUPABASE_SERVICE_ROLE_KEY: undefined }));
-    expect(result.ok).toBe(false);
-    expect(result.errors).toEqual(expect.arrayContaining([
+  test("keeps the service-role credential out of staging while requiring it in production", () => {
+    const staging = validateDeploymentEnvironment(base({ SUPABASE_SERVICE_ROLE_KEY: undefined }));
+    expect(staging.ok).toBe(true);
+
+    const production = validateDeploymentEnvironment(base({
+      AGENTS_GANG_ENVIRONMENT: "production",
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+    }));
+    expect(production.ok).toBe(false);
+    expect(production.errors).toEqual(expect.arrayContaining([
       expect.objectContaining({ feature: "core", variable: "SUPABASE_SERVICE_ROLE_KEY", code: "required" }),
     ]));
   });
