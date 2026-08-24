@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { requiresExplicitApprovalConfirmation } from "../../lib/approvals/decision";
 import {
   decisionConflictMessage,
@@ -42,6 +42,12 @@ type ApprovalDetailResponse = {
   error?: string;
 };
 
+type SignInResponse = {
+  token?: string;
+  expiresAt?: number;
+  error?: string;
+};
+
 type DecisionProgress = {
   approvalId: string;
   state: DecisionProgressState;
@@ -60,11 +66,13 @@ const statusLabels: Record<ApprovalFilter, string> = {
 const filters: ApprovalFilter[] = ["pending", "approved", "rejected", "expired", "consumed", "all"];
 
 export default function ApprovalsPage() {
+  const [accessSecret, setAccessSecret] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [filter, setFilter] = useState<ApprovalFilter>("pending");
-  const [message, setMessage] = useState("Loading persisted approval state...");
+  const [message, setMessage] = useState("Enter your founder access secret to load persisted approval state.");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
@@ -77,6 +85,12 @@ export default function ApprovalsPage() {
     append = false,
     preserveSelection = false,
   ) => {
+    if (!sessionToken) {
+      setLoading(false);
+      setMessage("Sign in to load persisted approval state.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setMessage(append ? "Loading more approval requests..." : `Loading ${statusLabels[requestedFilter].toLowerCase()}...`);
@@ -84,9 +98,14 @@ export default function ApprovalsPage() {
     try {
       const response = await fetch(buildApprovalListPath(requestedFilter, cursor), {
         method: "GET",
+        headers: { Authorization: `Bearer ${sessionToken}` },
         cache: "no-store",
       });
       const body = await response.json() as ApprovalListResponse;
+      if (response.status === 401 || response.status === 403) {
+        setSessionToken("");
+        throw new Error("Founder session expired or was rejected. Sign in again.");
+      }
       if (!response.ok) throw new Error(body.error ?? "Unable to load approvals");
 
       const incoming = body.approvals ?? [];
@@ -105,11 +124,45 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   useEffect(() => {
-    void loadApprovals("pending");
-  }, [loadApprovals]);
+    if (sessionToken) void loadApprovals("pending");
+  }, [sessionToken, loadApprovals]);
+
+  async function signIn(event: FormEvent) {
+    event.preventDefault();
+    const suppliedAccessSecret = accessSecret.trim();
+    if (!suppliedAccessSecret) {
+      setError("Founder access secret is required.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setMessage("Signing in...");
+    setAccessSecret("");
+
+    try {
+      const response = await fetch("/api/founder/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessSecret: suppliedAccessSecret }),
+        cache: "no-store",
+      });
+      const body = await response.json() as SignInResponse;
+      if (!response.ok || !body.token) {
+        setSessionToken("");
+        throw new Error(response.status === 401 ? "Founder access was denied." : body.error ?? "Founder sign-in is unavailable.");
+      }
+      setSessionToken(body.token);
+      setMessage("Founder session established. Loading approvals...");
+    } catch (signInError) {
+      setError(signInError instanceof Error ? signInError.message : "Founder sign-in is unavailable.");
+      setMessage("Approval data could not be loaded.");
+      setLoading(false);
+    }
+  }
 
   async function changeFilter(status: ApprovalFilter) {
     setFilter(status);
@@ -119,10 +172,11 @@ export default function ApprovalsPage() {
   }
 
   async function loadDetail(approvalId: string) {
+    if (!sessionToken) return;
     setDetailLoading(true);
     setError(null);
     try {
-      const approval = await fetchPersistedApproval(approvalId);
+      const approval = await fetchPersistedApproval(approvalId, sessionToken);
       setSelectedApproval(approval);
       requestAnimationFrame(() => detailHeadingRef.current?.focus());
     } catch (detailError) {
@@ -133,6 +187,10 @@ export default function ApprovalsPage() {
   }
 
   async function decide(approvalId: string, status: DecisionStatus, result: string) {
+    if (!sessionToken) {
+      setError("Founder session is required.");
+      return;
+    }
     if (!result.trim()) {
       const text = "Add a short decision note before submitting.";
       setError(text);
@@ -148,10 +206,18 @@ export default function ApprovalsPage() {
     try {
       const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionToken}`,
+        },
         body: JSON.stringify({ status, result: result.trim() }),
       });
       const body = await response.json() as ApprovalDetailResponse;
+
+      if (response.status === 401 || response.status === 403) {
+        setSessionToken("");
+        throw new Error("Founder session expired or was rejected. Sign in again.");
+      }
 
       if (response.status === 409) {
         const refreshing = "The server blocked this stale decision. Refreshing persisted state...";
@@ -160,7 +226,7 @@ export default function ApprovalsPage() {
 
         let latest: Approval | null = null;
         try {
-          latest = await fetchPersistedApproval(approvalId);
+          latest = await fetchPersistedApproval(approvalId, sessionToken);
         } catch {
           latest = null;
         }
@@ -208,20 +274,38 @@ export default function ApprovalsPage() {
         <div className="header-mark" aria-hidden="true">MG</div>
       </header>
 
-      <section className="access-panel" aria-labelledby="testing-access-heading">
+      <section className="access-panel" aria-labelledby="founder-access-heading">
         <div>
-          <p className="section-kicker">Testing mode</p>
-          <h2 id="testing-access-heading">Authentication disabled</h2>
-          <p className="muted">The queue loads directly while the app is under active testing. No founder session token is required.</p>
+          <p className="section-kicker">Founder access</p>
+          <h2 id="founder-access-heading">Load persisted approval state</h2>
+          <p className="muted">For staging UAT, enter the Founder access secret. It is exchanged server-side for a short-lived session and is not stored in browser storage.</p>
         </div>
-        <button type="button" onClick={() => void loadApprovals(filter)} disabled={loading}>{loading ? "Loading..." : "Refresh queue"}</button>
+        <form className="access-form" onSubmit={signIn}>
+          <label htmlFor="founder-access-secret">Founder access secret</label>
+          <div className="access-row">
+            <input
+              id="founder-access-secret"
+              type="password"
+              value={accessSecret}
+              onChange={(event) => setAccessSecret(event.target.value)}
+              placeholder={sessionToken ? "Founder session active in this tab" : "Enter founder access secret"}
+              autoComplete="current-password"
+              spellCheck={false}
+              disabled={loading || Boolean(sessionToken)}
+            />
+            <button type="submit" disabled={loading || Boolean(sessionToken)}>
+              {loading ? "Loading..." : "Sign in and load approvals"}
+            </button>
+            {sessionToken && <button type="button" onClick={() => void loadApprovals(filter)} disabled={loading}>{loading ? "Loading..." : "Refresh queue"}</button>}
+          </div>
+        </form>
       </section>
 
       <section className="queue-toolbar" aria-labelledby="queue-heading">
         <div><p className="section-kicker">Decision desk</p><h2 id="queue-heading">Persisted approval state</h2></div>
         <div className="filter-row" aria-label="Filter approvals by lifecycle status">
           {filters.map((status) => (
-            <button key={status} type="button" className={filter === status ? "filter active" : "filter"} onClick={() => void changeFilter(status)} aria-pressed={filter === status} disabled={loading}>{statusLabels[status]}</button>
+            <button key={status} type="button" className={filter === status ? "filter active" : "filter"} onClick={() => void changeFilter(status)} aria-pressed={filter === status} disabled={loading || !sessionToken}>{statusLabels[status]}</button>
           ))}
         </div>
       </section>
@@ -234,7 +318,7 @@ export default function ApprovalsPage() {
           {loading && approvals.length === 0 ? (
             <div className="loading-state" role="status"><span className="loading-pulse" aria-hidden="true" /><p>Loading persisted approval records...</p></div>
           ) : approvals.length === 0 ? (
-            <div className="empty-state"><span className="empty-icon" aria-hidden="true">✓</span><h3>{filter === "pending" ? "The queue is clear" : "No approval requests match this view"}</h3><p>Change the lifecycle filter or refresh after new governed actions are prepared.</p></div>
+            <div className="empty-state"><span className="empty-icon" aria-hidden="true">✓</span><h3>{filter === "pending" ? "The queue is clear" : "No approval requests match this view"}</h3><p>{sessionToken ? "Change the lifecycle filter or refresh after new governed actions are prepared." : "Sign in above to inspect protected approval state."}</p></div>
           ) : (
             <div className="approval-grid">
               {approvals.map((approval) => (
@@ -356,8 +440,12 @@ function buildApprovalListPath(filter: ApprovalFilter, cursor?: string) {
   return `/api/approvals?${query}`;
 }
 
-async function fetchPersistedApproval(approvalId: string) {
-  const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, { method: "GET", cache: "no-store" });
+async function fetchPersistedApproval(approvalId: string, sessionToken: string) {
+  const response = await fetch(`/api/approvals/${encodeURIComponent(approvalId)}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+    cache: "no-store",
+  });
   const body = await response.json() as ApprovalDetailResponse;
   if (!response.ok || !body.approval) throw new Error(body.error ?? "Unable to load approval detail");
   return body.approval;
