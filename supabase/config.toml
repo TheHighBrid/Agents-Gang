@@ -1,0 +1,4 @@
+[functions.agents-gang-persistence-bridge]
+# Founder sessions are application HMAC tokens, not Supabase JWTs. The function
+# verifies the session itself before issuing any allowlisted read.
+verify_jwt = false

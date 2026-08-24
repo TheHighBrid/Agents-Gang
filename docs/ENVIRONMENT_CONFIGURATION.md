@@ -33,7 +33,7 @@ Staging and production are managed targets. Core governance configuration is req
 | Variable | Feature | Secret | Risk | Requirement |
 |---|---|---:|---:|---|
 | `SUPABASE_URL` | core | No | 3 | Required in staging/production; HTTPS |
-| `SUPABASE_SERVICE_ROLE_KEY` | core | Yes | 4 | Required in staging/production |
+| `SUPABASE_SERVICE_ROLE_KEY` | core | Yes | 4 | Required in staging/production web runtime and supplied to the staging bridge |
 | `FOUNDER_AUTH_SECRET` | core | Yes | 4 | Required in staging/production; minimum strength |
 | `FOUNDER_REVOKED_SESSION_IDS` | core | No | 3 | Optional safe identifier list |
 | `AI_ENABLED` | ai | No | 2 | Explicit true/false in managed deployments |
@@ -63,8 +63,12 @@ Risk reflects the consequence of exposure or misconfiguration, not whether the c
 Staging and production require:
 
 - a valid HTTPS Supabase URL;
-- a non-placeholder Supabase service-role key;
-- a non-placeholder founder authentication secret of at least 32 characters.
+- a non-placeholder founder authentication secret of at least 32 characters;
+- a non-placeholder Supabase service-role key.
+
+The staging dashboard accesses data through the authenticated read-only bridge
+described below. Other staging workflows still use the service-role credential
+from the web runtime for governed persistence.
 
 Missing core configuration is a startup failure because the application cannot preserve its governed execution/audit or trusted founder identity boundaries without it.
 
@@ -126,5 +130,20 @@ Before promoting staging or production:
 4. Run `npm run validate:env` in the deployment environment.
 5. Stop promotion on any validation error.
 6. Retain only the safe validation outcome in release evidence, never environment values.
+
+### Staging persistence bridge
+
+The staging dashboard reads governed records through the deployed
+`agents-gang-persistence-bridge` Supabase Edge Function. Deploy it from the
+repository root with `supabase functions deploy agents-gang-persistence-bridge`.
+The function must receive `FOUNDER_AUTH_SECRET` and, when used,
+`FOUNDER_REVOKED_SESSION_IDS`; Supabase provides its URL and service-role key to
+the function runtime. The staging web runtime also requires the key until all
+non-dashboard persistence operations have a bridge-backed transport.
+
+The bridge disables Supabase JWT verification because founder sessions use the
+application's signed-session format. It independently verifies signature,
+expiry, founder role, and revocation, and only proxies read-only dashboard
+queries to an explicit table allowlist and fixed dashboard-safe projections.
 
 C5-03 is responsible for making this validation an enforced release status check. C5-06 remains responsible for the actual founder-authorized production promotion.
