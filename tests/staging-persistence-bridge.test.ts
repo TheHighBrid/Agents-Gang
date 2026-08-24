@@ -39,9 +39,9 @@ describe("deployable staging persistence bridge", () => {
 
     expect(bridge).toContain('"claim_scheduled_job"');
     expect(bridge).toContain('"complete_scheduled_job"');
-    expect(bridge).toContain('method === "GET"');
-    expect(bridge).toContain('method === "POST"');
-    expect(bridge).toContain('method === "PATCH"');
+    expect(bridge).toContain('method: "GET" | "POST" | "PATCH"');
+    expect(bridge).toContain("PATCH_TABLES");
+    expect(bridge).toContain('method !== "GET" && method !== "POST" && method !== "PATCH"');
     expect(bridge).not.toContain('method === "DELETE"');
   });
 
@@ -49,7 +49,9 @@ describe("deployable staging persistence bridge", () => {
     expect(bridge).toContain('scope: "founder"');
     expect(bridge).toContain('scope: "operator"');
     expect(bridge).toContain('?role=operator');
-    expect(bridge).toContain('pathname === "/approval_requests"');
+    expect(bridge).toContain('table === "approval_requests"');
+    expect(bridge).toContain('statusFilter === "eq.pending"');
+    expect(bridge).toContain('statusFilter === "eq.approved"');
   });
 
   test("preserves safe dashboard projections while allowing founder approval detail fields", () => {
