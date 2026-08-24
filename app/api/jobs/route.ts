@@ -17,17 +17,15 @@ import {
 
 type RuntimeOperator = {
   operatorId: string;
+  founderAuthorization: string;
   response: Response | null;
 };
 
 function runtimeOperator(request: Request): RuntimeOperator {
-  if (process.env.NODE_ENV !== "test") {
-    return { operatorId: "testing-mode", response: null };
-  }
-
   const result = authorizeOperatorRequest(request, process.env);
   return {
     operatorId: result.ok ? result.identity.subject : "unknown",
+    founderAuthorization: request.headers.get("authorization") ?? "",
     response: operatorAuthorizationResponse(result),
   };
 }
@@ -79,7 +77,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const repository = createExecutionRepository(process.env);
+    const repository = createExecutionRepository(process.env, {
+      founderAuthorization: authorization.founderAuthorization,
+    });
     const controller = createManualJobController({ repository, jobs: MANUAL_JOB_DEFINITIONS });
     const input = {
       jobName: candidate.jobName,
