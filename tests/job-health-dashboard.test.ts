@@ -46,7 +46,8 @@ describe("founder job health dashboard", () => {
     expect(page).toContain("aria-labelledby=\"operational-alerts-heading\"");
     expect(page).toContain("role=\"status\"");
     expect(page).toContain("status-badge");
-    expect(page).toContain("Founder access secret");
+    expect(page).toContain("Founder session token");
+    expect(page).not.toContain("Founder access secret");
     expect(page).not.toContain("Authentication disabled");
   });
 });

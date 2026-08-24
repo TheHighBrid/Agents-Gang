@@ -116,27 +116,20 @@ type Snapshot = {
   operationalHealth?: OperationalHealth;
 };
 
-type SignInResponse = {
-  token?: string;
-  expiresAt?: number;
-  error?: string;
-};
-
 export default function DashboardPage() {
-  const [accessSecret, setAccessSecret] = useState("");
   const [sessionToken, setSessionToken] = useState("");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [view, setView] = useState<DashboardView>("attention");
-  const [message, setMessage] = useState("Enter your founder access secret to load persisted operations state.");
+  const [message, setMessage] = useState("Enter a locally issued founder session to load persisted operations state.");
   const [error, setError] = useState<string | null>(null);
   const [accessDenied, setAccessDenied] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function loadDashboard(event?: FormEvent) {
     event?.preventDefault();
-    const suppliedAccessSecret = accessSecret.trim();
-    if (!sessionToken && !suppliedAccessSecret) {
-      setError("Founder access secret is required.");
+    const session = sessionToken.trim();
+    if (!session) {
+      setError("Founder session token is required.");
       setMessage("Dashboard not loaded.");
       setSnapshot(null);
       return;
@@ -147,33 +140,6 @@ export default function DashboardPage() {
     setAccessDenied(false);
 
     try {
-      let session = sessionToken;
-      if (!session) {
-        setMessage("Signing in...");
-        setAccessSecret("");
-        const signInResponse = await fetch("/api/founder/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessSecret: suppliedAccessSecret }),
-          cache: "no-store",
-        });
-        const signInBody = await signInResponse.json() as SignInResponse;
-
-        if (!signInResponse.ok || !signInBody.token) {
-          setSnapshot(null);
-          setSessionToken("");
-          setAccessDenied(signInResponse.status === 401 || signInResponse.status === 403);
-          setError(signInResponse.status === 401
-            ? "Founder access was denied. Check the access secret and try again."
-            : signInBody.error ?? "Founder sign-in is unavailable.");
-          setMessage("Dashboard not loaded.");
-          return;
-        }
-
-        session = signInBody.token;
-        setSessionToken(session);
-      }
-
       setMessage("Loading persisted operations state...");
       const response = await fetch("/api/dashboard", {
         headers: { Authorization: `Bearer ${session}` },
@@ -186,7 +152,7 @@ export default function DashboardPage() {
         if (response.status === 401 || response.status === 403) {
           setSessionToken("");
           setAccessDenied(true);
-          setError("Founder session expired or was rejected. Enter the founder access secret to sign in again.");
+          setError("Founder session expired or was rejected. Issue a new local session token and try again.");
         } else {
           setError(body.error ?? "Unable to load dashboard data.");
         }
@@ -262,23 +228,23 @@ export default function DashboardPage() {
         <div>
           <p className="section-kicker">Founder access</p>
           <h2 id="dashboard-access-heading">Load persisted operations state</h2>
-          <p className="muted">For staging UAT, enter the founder access secret. It is exchanged server-side for a short-lived session and is not stored in browser storage.</p>
+          <p className="muted">For staging UAT, enter a short-lived bearer token issued locally with <code>npm run founder:session</code>. Never enter the founder signing secret here.</p>
         </div>
         <form className="access-form" onSubmit={loadDashboard}>
-          <label htmlFor="founder-access-secret">Founder access secret</label>
+          <label htmlFor="founder-session-token">Founder session token</label>
           <div className="access-row">
             <input
-              id="founder-access-secret"
+              id="founder-session-token"
               type="password"
-              value={accessSecret}
-              onChange={(event) => setAccessSecret(event.target.value)}
-              placeholder={sessionToken ? "Founder session active in this tab" : "Enter founder access secret"}
-              autoComplete="current-password"
+              value={sessionToken}
+              onChange={(event) => setSessionToken(event.target.value)}
+              placeholder="Paste locally issued bearer token"
+              autoComplete="off"
               spellCheck={false}
-              disabled={loading || Boolean(sessionToken)}
+              disabled={loading}
             />
             <button type="submit" disabled={loading}>
-              {loading ? "Loading..." : sessionToken ? "Refresh operations" : "Sign in and load operations"}
+              {loading ? "Loading..." : snapshot ? "Refresh operations" : "Load operations"}
             </button>
           </div>
         </form>
