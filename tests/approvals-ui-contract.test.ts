@@ -25,6 +25,17 @@ describe("founder approvals UI contract", () => {
     expect(page).toContain("fetchPersistedApproval");
   });
 
+  it("requires founder sign-in and keeps the short-lived session in memory for protected requests", () => {
+    const page = read("app/approvals/page.tsx");
+    expect(page).toContain("Founder access secret");
+    expect(page).toContain("/api/founder/session");
+    expect(page).toContain("Sign in and load approvals");
+    expect(page).toContain("Authorization: `Bearer ${sessionToken}`");
+    expect(page).not.toContain("Authentication disabled");
+    expect(page).not.toContain("localStorage");
+    expect(page).not.toContain("sessionStorage");
+  });
+
   it("exposes explicit loading, error, empty, focus, and color-independent status semantics", () => {
     const page = read("app/approvals/page.tsx");
     expect(page).toContain("aria-busy={loading}");
