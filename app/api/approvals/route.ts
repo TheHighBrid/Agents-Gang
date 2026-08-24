@@ -3,14 +3,17 @@ import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../
 import { getApprovalListResponse } from "../../../lib/approvals/approval-api";
 
 export async function GET(request: Request) {
-  // Temporary testing mode: deployed/dev runtimes intentionally bypass user authentication.
-  if (process.env.NODE_ENV === "test") {
-    const authorization = founderAuthorizationResponse(authorizeFounderRequest(request, process.env));
-    if (authorization) return authorization;
-  }
+  const identity = authorizeFounderRequest(request, process.env);
+  const authorization = founderAuthorizationResponse(identity);
+  if (authorization) return authorization;
+
+  const founderAuthorization = request.headers.get("authorization") ?? "";
 
   try {
-    return await getApprovalListResponse(createExecutionRepository(process.env), request.url);
+    return await getApprovalListResponse(
+      createExecutionRepository(process.env, { founderAuthorization }),
+      request.url,
+    );
   } catch (error) {
     if (error instanceof ExecutionRepositoryConfigurationError) {
       return Response.json({ error: "Approval storage is not configured" }, { status: 503 });
