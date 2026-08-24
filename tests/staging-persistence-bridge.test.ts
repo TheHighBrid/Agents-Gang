@@ -21,7 +21,7 @@ describe("deployable staging persistence bridge", () => {
     expect(bridge).toContain('claims.expiresAt > Math.floor(Date.now() / 1000)');
     expect(bridge).toContain("revokedSessions.has(claims.sessionId)");
     expect(bridge.indexOf("await authorize(")).toBeLessThan(
-      bridge.indexOf("await fetch(`${supabaseUrl}/rest/v1${path}`"),
+      bridge.indexOf("await fetch(`${supabaseUrl}/rest/v1${query.path}`"),
     );
   });
 
@@ -37,6 +37,15 @@ describe("deployable staging persistence bridge", () => {
 
     expect(bridge).toContain('body.method !== "GET"');
     expect(bridge).toContain('method: "GET"');
-    expect(bridge).not.toContain('Authorization: `Bearer ${serviceRoleKey}`');
+    expect(bridge).toContain('url.searchParams.set("select", projection)');
+    expect(bridge).not.toContain('agent_runs: "*"');
+    expect(bridge).not.toMatch(/"audit_events":\s*"[^"]*metadata/);
+    expect(bridge).not.toMatch(/"routing_decisions":\s*"[^"]*reason/);
+    expect(bridge).not.toMatch(/"approval_requests":\s*"[^"]*(payload_summary|result)/);
+  });
+
+  test("authenticates legacy JWT service-role requests without forwarding modern secret keys", () => {
+    expect(bridge).toContain('!serviceRoleKey.startsWith("sb_secret_")');
+    expect(bridge).toContain('headers.Authorization = `Bearer ${serviceRoleKey}`');
   });
 });

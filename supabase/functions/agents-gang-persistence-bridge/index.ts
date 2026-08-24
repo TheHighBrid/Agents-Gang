@@ -1,11 +1,11 @@
-const ALLOWED_TABLES = new Set([
-  "agent_runs",
-  "approval_requests",
-  "audit_events",
-  "routing_decisions",
-  "scheduled_jobs",
-  "tool_calls",
-]);
+const DASHBOARD_PROJECTIONS: Record<string, string> = {
+  "agent_runs": "id,agent_name,risk_level,status,created_at,completed_at,error_code,duration_ms",
+  "approval_requests": "id,agent_name,action_type,target_type,target_id,risk_level,status,created_at,updated_at,decided_at,expires_at",
+  "audit_events": "id,run_id,agent_name,tool_name,risk_level,approval_id,event_type,outcome,created_at",
+  "routing_decisions": "id,run_id,selected_agent,risk_level,needed_tools,approval_required,created_at",
+  "scheduled_jobs": "id,job_name,status,attempt_count,max_attempts,retryable,last_error_code,next_retry_at,updated_at,completed_at",
+  "tool_calls": "id,run_id,agent_name,tool_name,capability,risk_level,approval_id,outcome,error_code,created_at",
+};
 
 type SessionClaims = {
   role: string;
@@ -78,10 +78,22 @@ function validatedPath(value: unknown) {
   }
 
   const segments = url.pathname.slice(1).split("/");
-  if (segments.length !== 1 || !ALLOWED_TABLES.has(segments[0] ?? "")) return null;
+  const table = segments[0] ?? "";
+  const projection = DASHBOARD_PROJECTIONS[table];
+  if (segments.length !== 1 || !projection) return null;
   if (url.searchParams.get("select") !== "*") return null;
   if ([...url.searchParams.keys()].some((key) => !["select", "order"].includes(key))) return null;
-  return `${url.pathname}${url.search}`;
+  url.searchParams.set("select", projection);
+  return { path: `${url.pathname}${url.search}`, table };
+}
+
+function dashboardSafeResponse(table: string, rows: unknown) {
+  if (!Array.isArray(rows)) return rows;
+  // Repository adapters expect these properties even though the dashboard never
+  // receives the underlying sensitive values.
+  if (table === "audit_events") return rows.map((row) => ({ ...(row as object), metadata: {} }));
+  if (table === "routing_decisions") return rows.map((row) => ({ ...(row as object), reason: "" }));
+  return rows;
 }
 
 Deno.serve(async (request) => {
@@ -105,18 +117,23 @@ Deno.serve(async (request) => {
   }
 
   if (body.method !== "GET") return json("Bridge is read-only", 403);
-  const path = validatedPath(body.path);
-  if (!path) return json("Invalid persistence path", 400);
+  const query = validatedPath(body.path);
+  if (!query) return json("Invalid persistence path", 400);
 
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1${path}`, {
+    const headers: Record<string, string> = { apikey: serviceRoleKey };
+    if (!serviceRoleKey.startsWith("sb_secret_")) headers.Authorization = `Bearer ${serviceRoleKey}`;
+    const response = await fetch(`${supabaseUrl}/rest/v1${query.path}`, {
       method: "GET",
-      headers: { apikey: serviceRoleKey },
+      headers,
     });
-    return new Response(response.body, {
-      status: response.status,
-      headers: { "Content-Type": response.headers.get("Content-Type") ?? "application/json" },
-    });
+    if (!response.ok) {
+      return new Response(response.body, {
+        status: response.status,
+        headers: { "Content-Type": response.headers.get("Content-Type") ?? "application/json" },
+      });
+    }
+    return Response.json(dashboardSafeResponse(query.table, await response.json()));
   } catch {
     return json("Persistence service unavailable", 502);
   }
