@@ -8,17 +8,15 @@ type RouteContext = { params: Promise<{ approvalId: string }> };
 
 type RuntimeAuthorization = {
   actor: string;
+  founderAuthorization: string;
   response: Response | null;
 };
 
 function runtimeAuthorization(request: Request): RuntimeAuthorization {
-  if (process.env.NODE_ENV !== "test") {
-    return { actor: "testing-mode", response: null };
-  }
-
   const identity = authorizeFounderRequest(request, process.env);
   return {
     actor: identity.ok ? identity.identity.subject : "unknown",
+    founderAuthorization: request.headers.get("authorization") ?? "",
     response: founderAuthorizationResponse(identity),
   };
 }
@@ -30,7 +28,10 @@ export async function GET(request: Request, context: RouteContext) {
   const { approvalId } = await context.params;
   if (!approvalId) return Response.json({ error: "Approval ID is required" }, { status: 400 });
   try {
-    return await getApprovalDetailResponse(createExecutionRepository(process.env), approvalId);
+    return await getApprovalDetailResponse(
+      createExecutionRepository(process.env, { founderAuthorization: authorization.founderAuthorization }),
+      approvalId,
+    );
   } catch (error) {
     return storageError(error, "Unable to load approval");
   }
@@ -59,9 +60,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     return Response.json({ error: "Decision note must be 2,000 characters or fewer" }, { status: 413 });
   }
 
-  let repository: ExecutionRepository;
+  let repository: ExecutionRepository | undefined;
   try {
-    repository = createExecutionRepository(process.env);
+    repository = createExecutionRepository(process.env, {
+      founderAuthorization: authorization.founderAuthorization,
+    });
     const existing = await repository.getApproval(approvalId);
     if (!existing) {
       await audit(repository, approvalId, authorization.actor, body.status, "failed", "not_found");
@@ -75,7 +78,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     await audit(repository, approvalId, authorization.actor, body.status, "succeeded");
     return Response.json({ approval: toSafeApproval(approval) });
   } catch (error) {
-    if (repository!) {
+    if (repository) {
       await audit(repository, approvalId, authorization.actor, body.status, "blocked", "conflict").catch(() => undefined);
     }
     if (error instanceof ExecutionRepositoryConfigurationError) return storageError(error, "Unable to decide approval");
