@@ -11,12 +11,12 @@ function restoreFounderSecret() {
 
 afterEach(restoreFounderSecret);
 
-function founderToken(secret: string) {
+function sessionToken(secret: string, role: "founder" | "operator") {
   const now = Math.floor(Date.now() / 1000);
   return createFounderSessionToken({
-    subject: "staging-founder",
-    role: "founder",
-    sessionId: "bridge-verifier-session",
+    subject: `staging-${role}`,
+    role,
+    sessionId: `bridge-verifier-${role}-session`,
     issuedAt: now,
     expiresAt: now + 60,
   }, secret);
@@ -39,7 +39,7 @@ describe("founder session verifier", () => {
   test("returns only minimal founder identity for a valid session", async () => {
     const secret = "synthetic-founder-auth-secret-value-at-least-32-characters";
     process.env.FOUNDER_AUTH_SECRET = secret;
-    const token = founderToken(secret);
+    const token = sessionToken(secret, "founder");
 
     const response = await GET(new Request("https://example.test/api/founder/verify", {
       headers: { Authorization: `Bearer ${token}` },
@@ -51,5 +51,20 @@ describe("founder session verifier", () => {
     expect(body).toEqual(expect.objectContaining({ ok: true, role: "founder", subject: "staging-founder" }));
     expect(body).not.toHaveProperty("token");
     expect(body).not.toHaveProperty("sessionId");
+  });
+
+  test("accepts operator sessions only when the caller explicitly requests operator scope", async () => {
+    const secret = "synthetic-founder-auth-secret-value-at-least-32-characters";
+    process.env.FOUNDER_AUTH_SECRET = secret;
+    const token = sessionToken(secret, "operator");
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const founderOnly = await GET(new Request("https://example.test/api/founder/verify", { headers }));
+    expect(founderOnly.status).toBe(403);
+
+    const operatorScoped = await GET(new Request("https://example.test/api/founder/verify?role=operator", { headers }));
+    const body = await operatorScoped.json() as Record<string, unknown>;
+    expect(operatorScoped.status).toBe(200);
+    expect(body).toEqual(expect.objectContaining({ ok: true, role: "operator", subject: "staging-operator" }));
   });
 });

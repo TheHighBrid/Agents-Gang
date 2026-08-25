@@ -31,14 +31,31 @@ function requestUrl(input: RequestInfo | URL) {
   return input.url;
 }
 
+function parseBridgeBody(body: BodyInit | null | undefined) {
+  if (body === undefined || body === null || body === "") return undefined;
+  if (typeof body !== "string") {
+    throw new ExecutionRepositoryConfigurationError(
+      "Staging persistence bridge only accepts JSON request bodies",
+    );
+  }
+
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    throw new ExecutionRepositoryConfigurationError(
+      "Staging persistence bridge request body must be valid JSON",
+    );
+  }
+}
+
 function createStagingBridgeRequest(supabaseUrl: string, founderAuthorization: string) {
   const normalizedUrl = supabaseUrl.replace(/\/$/, "");
   const bridgeUrl = `${normalizedUrl}/functions/v1/agents-gang-persistence-bridge`;
 
   return (input: RequestInfo | URL, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
-    if (method !== "GET") {
-      return Promise.resolve(Response.json({ error: "Persistence bridge is read-only" }, { status: 403 }));
+    if (method !== "GET" && method !== "POST" && method !== "PATCH") {
+      return Promise.resolve(Response.json({ error: "Persistence operation is not allowed" }, { status: 403 }));
     }
 
     const upstreamUrl = new URL(requestUrl(input));
@@ -49,13 +66,26 @@ function createStagingBridgeRequest(supabaseUrl: string, founderAuthorization: s
     }
 
     const path = `${upstreamUrl.pathname.slice(restIndex + restPrefix.length)}${upstreamUrl.search}`;
+    const requestHeaders = new Headers(init?.headers);
+    let body: unknown;
+    try {
+      body = parseBridgeBody(init?.body);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+
     return fetch(bridgeUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: founderAuthorization,
       },
-      body: JSON.stringify({ path, method }),
+      body: JSON.stringify({
+        path,
+        method,
+        ...(body !== undefined ? { body } : {}),
+        ...(requestHeaders.get("Prefer") ? { prefer: requestHeaders.get("Prefer") } : {}),
+      }),
       cache: "no-store",
     });
   };

@@ -1,4 +1,9 @@
-import { authorizeFounderRequest, founderAuthorizationResponse } from "../../../../lib/approvals/auth";
+import {
+  authorizeFounderRequest,
+  authorizeOperatorRequest,
+  founderAuthorizationResponse,
+  operatorAuthorizationResponse,
+} from "../../../../lib/approvals/auth";
 
 function noStore(response: Response) {
   const headers = new Headers(response.headers);
@@ -11,10 +16,16 @@ function noStore(response: Response) {
 }
 
 export async function GET(request: Request) {
-  const authorization = authorizeFounderRequest(request, process.env);
+  const operatorScope = new URL(request.url).searchParams.get("role") === "operator";
+  const authorization = operatorScope
+    ? authorizeOperatorRequest(request, process.env)
+    : authorizeFounderRequest(request, process.env);
+
   if (!authorization.ok) {
-    const denied = founderAuthorizationResponse(authorization);
-    if (!denied) throw new Error("Founder authorization failure did not produce a response");
+    const denied = operatorScope
+      ? operatorAuthorizationResponse(authorization)
+      : founderAuthorizationResponse(authorization);
+    if (!denied) throw new Error("Authorization failure did not produce a response");
     return noStore(denied);
   }
 
