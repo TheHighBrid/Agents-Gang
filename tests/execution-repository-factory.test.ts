@@ -108,9 +108,9 @@ describe("execution repository factory", () => {
         risk_level: 3,
         payload_summary: "safe summary",
         status: "approved",
-        created_at: "2026-08-22T20:00:00.000Z",
-        updated_at: "2026-08-22T20:01:00.000Z",
-        decided_at: "2026-08-22T20:01:00.000Z",
+        created_at: "2026-08-24T06:00:00.000Z",
+        updated_at: "2026-08-24T06:01:00.000Z",
+        decided_at: "2026-08-24T06:01:00.000Z",
         result: "approved in staging",
         expires_at: null,
       }]);
