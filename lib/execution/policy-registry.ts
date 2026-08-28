@@ -66,6 +66,17 @@ const mutationPolicy = (
 export const TOOL_POLICY_REGISTRY: readonly ToolPolicy[] = Object.freeze([
   readPolicy("web.search", "public_web"),
   readPolicy("gmail.messages.search", "gmail_mailbox"),
+  readPolicy("calendar.events.read", "google_calendar"),
+  toolPolicy({
+    actionType: "calendar.focus.create",
+    capability: "execute",
+    riskLevel: 3,
+    approvalRequired: true,
+    targetBinding: "required",
+    targetIdentity: "calendar_event",
+    externalEffect: "mutate",
+    idempotency: "required",
+  }),
   toolPolicy({
     actionType: "gmail.draft.create",
     capability: "draft",

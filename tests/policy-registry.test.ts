@@ -16,6 +16,8 @@ describe("typed capability and risk policy registry", () => {
       "gmail.messages.search",
       "gmail.draft.create",
       "gmail.draft.send",
+      "calendar.events.read",
+      "calendar.focus.create",
       "product.image.audit",
       "inbox.alert.send",
       "shopify.products.read",
@@ -65,6 +67,8 @@ describe("typed capability and risk policy registry", () => {
     expect(getToolPolicy("gmail.messages.search")).toMatchObject({ capability: "read", riskLevel: 1, approvalRequired: false });
     expect(getToolPolicy("gmail.draft.create")).toMatchObject({ capability: "draft", riskLevel: 3, approvalRequired: true, targetBinding: "required" });
     expect(getToolPolicy("gmail.draft.send")).toMatchObject({ capability: "execute", riskLevel: 4, approvalRequired: true, targetBinding: "required" });
+    expect(getToolPolicy("calendar.events.read")).toMatchObject({ capability: "read", riskLevel: 1, approvalRequired: false });
+    expect(getToolPolicy("calendar.focus.create")).toMatchObject({ capability: "execute", riskLevel: 3, approvalRequired: true, idempotency: "required" });
     expect(getToolPolicy("shopify.product.update")).toMatchObject({ capability: "execute", riskLevel: 3, approvalRequired: true, targetBinding: "required" });
   });
 

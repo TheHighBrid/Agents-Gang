@@ -13,6 +13,7 @@ function base(overrides: Record<string, string | undefined> = {}) {
     AI_ENABLED: "false",
     SHOPIFY_ENABLED: "false",
     GMAIL_ENABLED: "false",
+    CALENDAR_ENABLED: "false",
     WEB_SEARCH_ENABLED: "false",
     INBOX_ALERTS_ENABLED: "false",
     GMAIL_SEND_ENABLED: "false",
@@ -25,7 +26,7 @@ describe("deployment environment validation", () => {
     const result = validateDeploymentEnvironment(base());
     expect(result.ok).toBe(true);
     expect(result.enabledFeatures).toEqual(["core"]);
-    expect(result.disabledFeatures).toEqual(expect.arrayContaining(["ai", "shopify", "gmail", "web_search", "inbox_alerts"]));
+    expect(result.disabledFeatures).toEqual(expect.arrayContaining(["ai", "shopify", "gmail", "calendar", "web_search", "inbox_alerts"]));
   });
 
   test("requires the service-role credential for all managed environments", () => {

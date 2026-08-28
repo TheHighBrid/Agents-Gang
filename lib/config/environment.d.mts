@@ -1,5 +1,5 @@
 export type DeploymentTarget = "development" | "staging" | "production";
-export type DeploymentFeature = "core" | "ai" | "shopify" | "gmail" | "web_search" | "inbox_alerts" | "migration";
+export type DeploymentFeature = "core" | "ai" | "shopify" | "gmail" | "calendar" | "web_search" | "inbox_alerts" | "migration";
 export type ConfigurationRisk = 1 | 2 | 3 | 4;
 
 export type EnvironmentInventoryEntry = {
