@@ -55,6 +55,12 @@ const SAFE_ADAPTER_ERROR_CODES = new Set([
   "gmail_transport_failed",
   "gmail_timeout",
   "gmail_malformed_response",
+  "calendar_auth_failed",
+  "calendar_rate_limited",
+  "calendar_upstream_failed",
+  "calendar_transport_failed",
+  "calendar_timeout",
+  "calendar_malformed_response",
 ]);
 
 function normalizeExecutionFailure(error: unknown) {
