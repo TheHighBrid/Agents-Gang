@@ -1,0 +1,45 @@
+name: Repair security lockfile
+
+on:
+  push:
+    branches:
+      - fix/security-audit-lockfile
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/security-audit-lockfile
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Repair vulnerable lockfile entries
+        run: npm audit fix --package-lock-only
+
+      - name: Verify no high or critical vulnerabilities remain
+        run: npm audit --audit-level=high
+
+      - name: Commit repaired lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff --exit-code package.json || true
+          git diff -- package-lock.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: repair dependency audit lockfile"
+          git push origin HEAD:fix/security-audit-lockfile
