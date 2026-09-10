@@ -31,6 +31,9 @@
     "eslint": "latest",
     "eslint-config-next": "latest",
     "typescript": "latest",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "js-yaml": "4.3.2"
   }
 }
