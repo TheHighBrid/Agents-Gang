@@ -24,22 +24,35 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Repair vulnerable lockfile entries
-        run: npm audit fix --package-lock-only
+      - name: Set patched dependency policy
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const path = 'package.json';
+          const pkg = JSON.parse(readFileSync(path, 'utf8'));
+          pkg.devDependencies = { ...pkg.devDependencies, vitest: '^4.1.11' };
+          pkg.overrides = { ...pkg.overrides, 'js-yaml': '4.3.2' };
+          writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+
+      - name: Regenerate lockfile from patched policy
+        run: npm install --package-lock-only --ignore-scripts
 
       - name: Verify no high or critical vulnerabilities remain
         run: npm audit --audit-level=high
 
-      - name: Commit repaired lockfile
+      - name: Verify supply-chain policy
+        run: node scripts/check-supply-chain.mjs
+
+      - name: Commit repaired dependency policy
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          git diff --exit-code package.json || true
-          git diff -- package-lock.json
+          git diff -- package.json package-lock.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
+          git add package.json package-lock.json
           git diff --cached --quiet && exit 0
           git commit -m "chore: repair dependency audit lockfile"
           git push origin HEAD:fix/security-audit-lockfile
