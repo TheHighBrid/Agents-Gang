@@ -11,10 +11,18 @@ function stableEntries(value = {}) {
   return Object.entries(value).sort(([left], [right]) => left.localeCompare(right));
 }
 
-function sameDependencyMap(left = {}, right = {}) {
-  const leftEntries = stableEntries(left);
-  const rightEntries = stableEntries(right);
-  return JSON.stringify(leftEntries) === JSON.stringify(rightEntries);
+function sameDependencyMap(manifestDependencies = {}, lockDependencies = {}) {
+  const manifestEntries = stableEntries(manifestDependencies);
+  const lockEntries = stableEntries(lockDependencies);
+  if (manifestEntries.length !== lockEntries.length) return false;
+
+  return manifestEntries.every(([name, manifestSpecifier], index) => {
+    const [lockName, lockSpecifier] = lockEntries[index] ?? [];
+    if (name !== lockName) return false;
+
+    return manifestSpecifier === lockSpecifier
+      || (manifestSpecifier === "latest" && lockSpecifier === "*");
+  });
 }
 
 export function inspectLockfilePolicy(root = defaultRoot) {
