@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -41,6 +42,54 @@ describe("release gate policy", () => {
 
   test("keeps package.json and package-lock root dependency policy aligned", () => {
     expect(inspectLockfilePolicy(root)).toEqual({ ok: true, errors: [] });
+  });
+
+  test("accepts npm latest-to-wildcard lock metadata without allowing real dependency drift", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "agents-gang-lock-policy-"));
+    try {
+      const manifest = {
+        name: "lock-policy-fixture",
+        version: "1.0.0",
+        dependencies: {
+          next: "latest",
+          react: "^19.0.0",
+        },
+        devDependencies: {
+          eslint: "latest",
+        },
+      };
+      const lock = {
+        name: "lock-policy-fixture",
+        version: "1.0.0",
+        lockfileVersion: 3,
+        packages: {
+          "": {
+            name: "lock-policy-fixture",
+            version: "1.0.0",
+            dependencies: {
+              next: "*",
+              react: "^19.0.0",
+            },
+            devDependencies: {
+              eslint: "*",
+            },
+          },
+        },
+      };
+
+      writeFileSync(join(fixtureRoot, "package.json"), JSON.stringify(manifest));
+      writeFileSync(join(fixtureRoot, "package-lock.json"), JSON.stringify(lock));
+      expect(inspectLockfilePolicy(fixtureRoot)).toEqual({ ok: true, errors: [] });
+
+      lock.packages[""].dependencies.react = "^18.0.0";
+      writeFileSync(join(fixtureRoot, "package-lock.json"), JSON.stringify(lock));
+      expect(inspectLockfilePolicy(fixtureRoot)).toEqual({
+        ok: false,
+        errors: ["runtime dependencies differ between package.json and package-lock.json"],
+      });
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   test("release manifest retains candidate and supply-chain provenance without secrets", () => {
