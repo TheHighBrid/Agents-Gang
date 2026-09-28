@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertGovernancePolicy } from "./check-ai-governance.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = resolve(scriptPath, "../..");
@@ -29,6 +30,12 @@ function provenancePaths(root) {
     "package-lock.json",
     "db/schema.sql",
     "db/verify.sql",
+    "AI_OPERATOR_GOVERNANCE.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GROK.md",
+    "MANUS.md",
+    "scripts/check-ai-governance.mjs",
     ...readdirSync(migrationDirectory)
       .filter((name) => name.endsWith(".sql"))
       .sort()
@@ -41,6 +48,8 @@ function provenancePaths(root) {
 }
 
 export function createReleaseManifest(root = defaultRoot, options = {}) {
+  assertGovernancePolicy(root);
+
   const candidateSha = options.candidateSha ?? process.env.GITHUB_SHA ?? "";
   const eventName = options.eventName ?? process.env.GITHUB_EVENT_NAME ?? "local";
   const refName = options.refName ?? process.env.GITHUB_REF_NAME ?? "local";
