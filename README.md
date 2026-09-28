@@ -2,6 +2,10 @@
 
 Melato OS is a private, specialist-agent operating system for product-page audits, creative direction, Shopify operations, visual QA, concierge support, trend research, finance, and career administration. The current implementation is a **governed execution foundation**: requests are routed through a provider-neutral AI boundary, high-risk tool calls are approval-gated in code, and executions are designed to persist a reviewable audit trail.
 
+## AI governance
+
+All repository AI work must start from [`AGENTS.md`](./AGENTS.md) and the canonical [`AI_OPERATOR_GOVERNANCE.md`](./AI_OPERATOR_GOVERNANCE.md). TheHighBrid remains final authority, Grok is the Primary Operator, and older role assignments in planning documents are task-specialty guidance only where they do not conflict with the canonical governance policy.
+
 ## Phase 1 MVP
 
 Apply `db/schema.sql` to a fresh Supabase project. Existing deployments should first apply `db/migrations/20260815_governed_execution_up.sql`. The paired `20260815_governed_execution_down.sql` reverses the migration; use it only after confirming no governed-execution records must be retained.
