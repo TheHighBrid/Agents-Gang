@@ -18,6 +18,7 @@ const LOCKED_BOOTSTRAPS = Object.freeze({
 
 const KNOWN_INSTRUCTION_FILES = new Set([
   "agents.md",
+  "agents.override.md",
   "chatgpt.md",
   "claude.md",
   "grok.md",
@@ -50,25 +51,33 @@ function gitBlobSha(content) {
     .digest("hex");
 }
 
+function isInstructionPath(path) {
+  const lowerPath = path.toLowerCase();
+  const lowerBase = basename(lowerPath);
+  return KNOWN_INSTRUCTION_FILES.has(lowerBase)
+    || lowerBase.endsWith(".instructions.md")
+    || lowerPath === ".github/instructions"
+    || lowerPath.startsWith(".github/instructions/");
+}
+
 function walkInstructionFiles(root, directory = root) {
   const paths = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (SKIP_DIRECTORIES.has(entry.name)) continue;
-      paths.push(...walkInstructionFiles(root, join(directory, entry.name)));
+    const absolute = join(directory, entry.name);
+    const path = normalizePath(relative(root, absolute));
+
+    if (entry.isSymbolicLink()) {
+      if (isInstructionPath(path)) paths.push(path);
       continue;
     }
-    if (!entry.isFile()) continue;
-    const path = normalizePath(relative(root, join(directory, entry.name)));
-    const lowerPath = path.toLowerCase();
-    const lowerBase = basename(lowerPath);
-    if (
-      KNOWN_INSTRUCTION_FILES.has(lowerBase)
-      || lowerBase.endsWith(".instructions.md")
-      || lowerPath.startsWith(".github/instructions/")
-    ) {
-      paths.push(path);
+
+    if (entry.isDirectory()) {
+      if (SKIP_DIRECTORIES.has(entry.name)) continue;
+      paths.push(...walkInstructionFiles(root, absolute));
+      continue;
     }
+
+    if (entry.isFile() && isInstructionPath(path)) paths.push(path);
   }
   return paths.sort();
 }
