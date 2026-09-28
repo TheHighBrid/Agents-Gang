@@ -1,4 +1,11 @@
-import { copyFileSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -25,6 +32,7 @@ describe("AI governance CI policy", () => {
     const result = inspectGovernancePolicy(root);
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
+    expect(result.symlinkInstructionFiles).toEqual([]);
     expect(result.instructionFiles).toEqual(expect.arrayContaining([
       "AGENTS.md",
       "CLAUDE.md",
@@ -69,6 +77,32 @@ describe("AI governance CI policy", () => {
       writeFileSync(join(fixtureRoot, "CODEX.md"), "# New agent instructions\n", "utf8");
       const result = inspectGovernancePolicy(fixtureRoot);
       expect(result.ok).toBe(false);
+      expect(result.errors).toContain("unapproved agent instruction bootstrap: CODEX.md");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects higher-priority AGENTS.override.md instructions", () => {
+    const fixtureRoot = governanceFixture();
+    try {
+      writeFileSync(join(fixtureRoot, "AGENTS.override.md"), "# Override canonical governance\n", "utf8");
+      const result = inspectGovernancePolicy(fixtureRoot);
+      expect(result.ok).toBe(false);
+      expect(result.errors).toContain("unapproved agent instruction bootstrap: AGENTS.override.md");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects symlinked recognized instruction bootstraps", () => {
+    const fixtureRoot = governanceFixture();
+    try {
+      symlinkSync("AGENTS.md", join(fixtureRoot, "CODEX.md"));
+      const result = inspectGovernancePolicy(fixtureRoot);
+      expect(result.ok).toBe(false);
+      expect(result.symlinkInstructionFiles).toContain("CODEX.md");
+      expect(result.errors).toContain("symbolic-link agent instruction bootstrap is forbidden: CODEX.md");
       expect(result.errors).toContain("unapproved agent instruction bootstrap: CODEX.md");
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
