@@ -60,26 +60,38 @@ function isInstructionPath(path) {
     || lowerPath.startsWith(".github/instructions/");
 }
 
-function walkInstructionFiles(root, directory = root) {
-  const paths = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const absolute = join(directory, entry.name);
-    const path = normalizePath(relative(root, absolute));
+function collectInstructionEntries(root) {
+  const instructionFiles = [];
+  const symlinkInstructionFiles = [];
 
-    if (entry.isSymbolicLink()) {
-      if (isInstructionPath(path)) paths.push(path);
-      continue;
+  function walk(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = join(directory, entry.name);
+      const path = normalizePath(relative(root, absolute));
+
+      if (entry.isSymbolicLink()) {
+        if (isInstructionPath(path)) {
+          instructionFiles.push(path);
+          symlinkInstructionFiles.push(path);
+        }
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        if (SKIP_DIRECTORIES.has(entry.name)) continue;
+        walk(absolute);
+        continue;
+      }
+
+      if (entry.isFile() && isInstructionPath(path)) instructionFiles.push(path);
     }
-
-    if (entry.isDirectory()) {
-      if (SKIP_DIRECTORIES.has(entry.name)) continue;
-      paths.push(...walkInstructionFiles(root, absolute));
-      continue;
-    }
-
-    if (entry.isFile() && isInstructionPath(path)) paths.push(path);
   }
-  return paths.sort();
+
+  walk(root);
+  return {
+    instructionFiles: instructionFiles.sort(),
+    symlinkInstructionFiles: symlinkInstructionFiles.sort(),
+  };
 }
 
 export function inspectGovernancePolicy(root = defaultRoot) {
@@ -97,8 +109,13 @@ export function inspectGovernancePolicy(root = defaultRoot) {
     }
   }
 
-  const instructionFiles = walkInstructionFiles(root);
+  const { instructionFiles, symlinkInstructionFiles } = collectInstructionEntries(root);
   const approved = new Set(Object.keys(LOCKED_BOOTSTRAPS).filter((path) => path !== "AI_OPERATOR_GOVERNANCE.md"));
+
+  for (const path of symlinkInstructionFiles) {
+    errors.push(`symbolic-link agent instruction bootstrap is forbidden: ${path}`);
+  }
+
   for (const path of instructionFiles) {
     if (!approved.has(path)) {
       errors.push(`unapproved agent instruction bootstrap: ${path}`);
@@ -109,6 +126,7 @@ export function inspectGovernancePolicy(root = defaultRoot) {
     ok: errors.length === 0,
     errors: errors.sort(),
     instructionFiles,
+    symlinkInstructionFiles,
   };
 }
 
