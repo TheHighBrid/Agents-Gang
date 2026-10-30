@@ -1,0 +1,26 @@
+# Template for a single persistent Linux host. Adapt paths/user before installation.
+[Unit]
+Description=Agents-Gang offline routing improvement worker
+After=network.target
+
+[Service]
+Type=simple
+User=agents-gang
+Group=agents-gang
+WorkingDirectory=/opt/agents-gang
+Environment=SELF_IMPROVEMENT_ENABLED=true
+Environment=SELF_IMPROVEMENT_DIR=/var/lib/agents-gang/improvement
+# No model, Shopify, Gmail, database, or founder-auth credentials are required.
+ExecStart=/usr/bin/node scripts/improvement-worker.mjs
+Restart=on-failure
+RestartSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/agents-gang/improvement
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
