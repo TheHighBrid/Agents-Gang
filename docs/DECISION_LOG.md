@@ -97,3 +97,15 @@ No baseline decisions are fabricated here. Add rows only when an authorized deci
 4. Update `docs/RELEASE_EVIDENCE_REGISTER.md` when the decision affects release readiness, an accepted exception, staging/UAT, or go/no-go posture.
 5. Update `docs/TASK_TRACKER.md` in the same pull request when the decision changes a dependency, milestone, target date, or task status materially.
 6. Never delete historical decisions. Mark them `Superseded` or `Reversed` and link the replacement.
+
+### DEC-20261030-01 - Config-first Agents-Gang routing learner
+- Status: Proposed for integration review
+- Date: 2026-10-30
+- Decision owner: TheHighBrid (requested implementation); integration review pending
+- Affected task: #116 / SI-01
+- Required reviewer: Grok / integration operator
+- Context: Owner supplied five improvement/planning documents and requested autonomous self-correction and improvement for Agents-Gang.
+- Options: add a parallel Python/Postgres service, or implement a bounded Node-native routing learner in the existing app.
+- Chosen implementation: Node-native declarative routing learner, fixed evaluation contracts, persistent single-host volume, separate credential-free worker, and existing founder auth for feedback/control. No new database schema, external mutation capability, or source self-authoring.
+- Evidence: `tests/self-improvement.test.ts`, `tests/improvement-chat.test.ts`, `tests/improvement-api.test.ts`, `tests/improvement-worker.test.ts`, `npm run improvement:verify`.
+- Consequences: v0.1 requires a durable single-host deployment; serverless/multi-replica storage needs a database adapter. Routing correctness is measured separately from substantive task quality. Production enablement and later sandboxed code authoring remain separate release gates. Disable the feature flag to restore static routing; rollback also pauses learning.

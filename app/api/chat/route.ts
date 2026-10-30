@@ -1,3 +1,4 @@
+import { createImprovementStore } from "../../../lib/improvement/runtime";
 import {
   AIProviderConfigurationError,
   AIProviderError,
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
       loadMemory,
       repository,
       correlationId,
+      improvementStore: createImprovementStore(process.env),
     });
     logger.record({
       event: "chat.request.completed",
@@ -74,6 +76,7 @@ export async function POST(req: Request) {
       output: result.output,
       provider: result.provider,
       model: result.model,
+      learningAttemptId: "learningAttemptId" in result ? result.learningAttemptId : undefined,
     }, 200, result.correlationId);
   } catch (error) {
     const status = error instanceof AIProviderError ||

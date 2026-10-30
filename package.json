@@ -19,7 +19,10 @@
     "founder:session": "node scripts/create-founder-session.mjs",
     "db:migrate": "node scripts/db-migrate.mjs apply",
     "db:migration:bundle": "node scripts/db-migrate.mjs bundle",
-    "db:verify": "node scripts/db-migrate.mjs apply verify"
+    "db:verify": "node scripts/db-migrate.mjs apply verify",
+    "improvement:worker": "node scripts/improvement-worker.mjs",
+    "improvement:once": "node scripts/improvement-worker.mjs --once",
+    "improvement:verify": "node scripts/verify-improvement.mjs"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

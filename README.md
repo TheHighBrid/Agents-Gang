@@ -64,3 +64,7 @@ provider response is invalid.
 - Price changes require approval.
 - Deletion requires approval.
 - Missing product specs must be marked as missing instead of invented.
+
+## Continuous self-improvement
+
+Agents-Gang includes an opt-in routing learning loop: privacy-preserving attempt records, bounded schema repair, trusted outcome feedback, offline champion/challenger evaluation, automatic config promotion, and rollback. Run `npm run improvement:verify` for an offline proof. See [the self-improvement runbook](docs/SELF_IMPROVEMENT.md) for supported hosting, worker setup, limits, and production gates.
