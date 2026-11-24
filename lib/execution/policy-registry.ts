@@ -65,6 +65,7 @@ const mutationPolicy = (
 
 export const TOOL_POLICY_REGISTRY: readonly ToolPolicy[] = Object.freeze([
   readPolicy("web.search", "public_web"),
+  readPolicy("web.read", "public_web_page"),
   readPolicy("gmail.messages.search", "gmail_mailbox"),
   readPolicy("calendar.events.read", "google_calendar"),
   toolPolicy({
