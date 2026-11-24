@@ -79,7 +79,7 @@ function safeFormatOutput(value: unknown, requested: boolean, format: string): F
 export async function scrapePublicWebPage(options: ContextWebReadOptions): Promise<ContextWebReadResult> {
   const sourceUrl = publicWebUrl(options.url);
   const key = (options.apiKey ?? process.env.CONTEXT_DEV_API_KEY ?? process.env.CONTEXT_API_KEY ?? "").trim();
-  if (process.env.CONTEXT_DEV_ENABLED === "false") throw new ContextWebReadError("Context.dev is disabled");
+  if (options.apiKey === undefined && process.env.CONTEXT_DEV_ENABLED !== "true") throw new ContextWebReadError("Context.dev is disabled");
   if (!key) throw new ContextWebReadError("CONTEXT_DEV_API_KEY must be configured");
   const formats = Object.fromEntries(Object.entries(options.formats).filter(([, value]) => value === true));
   if (!Object.keys(formats).length || Object.keys(formats).some((name) => !FORMATS.includes(name as WebReadFormat))) {
