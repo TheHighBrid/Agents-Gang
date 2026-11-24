@@ -14,7 +14,7 @@ export type ContextWebReadResult = {
   retrievedAt: string;
   requestId: string | null;
   isPartial: boolean;
-  outputs: Partial<Record<WebReadFormat, FormatOutput>>;
+  outputs: Record<WebReadFormat, FormatOutput>;
 };
 export type ContextWebReadOptions = {
   url: string;
@@ -152,7 +152,7 @@ export async function scrapePublicWebPage(options: ContextWebReadOptions): Promi
       } catch {
         throw new ContextWebReadError("Context.dev returned a non-public final URL");
       }
-      const outputs: Partial<Record<WebReadFormat, FormatOutput>> = {};
+      const outputs = {} as Record<WebReadFormat, FormatOutput>;
       for (const name of FORMATS) {
         outputs[name] = safeFormatOutput(payload[name === "parse" ? "parsed" : name], Boolean(formats[name]), name);
       }
