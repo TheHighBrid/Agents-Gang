@@ -33,9 +33,9 @@ describe("Context.dev governed web-reading tool", () => {
     expect(result.sourceUrl).toBe("https://docs.example.org/start");
     expect(result.finalUrl).toBe("https://docs.example.org/final");
     expect(result.isPartial).toBe(true);
-    expect(result.outputs.markdown.data).toBe("# Public documentation");
-    expect(result.outputs.json.error_code).toBe("NO_DATA");
-    expect(result.outputs.json.data).toBeNull();
+    expect(result.outputs.markdown?.data).toBe("# Public documentation");
+    expect(result.outputs.json?.error_code).toBe("NO_DATA");
+    expect(result.outputs.json?.data).toBeNull();
   });
 
   test("retains caller-defined schema keys and emits task-specific highlights", async () => {
@@ -86,7 +86,7 @@ describe("Context.dev governed web-reading tool", () => {
       },
     });
     expect(attempts).toBe(2);
-    expect(result.outputs.markdown.data).toBe("ok");
+    expect(result.outputs.markdown?.data).toBe("ok");
   });
 
   test("governance audit and run-scoped request limit cannot be bypassed with a second tool call", async () => {
